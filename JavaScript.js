@@ -1,4 +1,4 @@
-// Branch Staff Directory JavaScript
+// Branch Staff Directory JavaScript (connected to Google Apps Script backend)
 
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwpC3yx4TNwq-vEJiO2HeJ54X0TPWiKLZW_yypByCkbz2Cgc5_ABafmrWoZUBZJo2Kp/exec';
 
@@ -37,10 +37,9 @@ function fetchData(funcName, params = {}) {
 
 function postData(funcName, payload) {
     const url = new URL(SCRIPT_URL);
-    url.searchParams.append('function', funcName);
     return fetch(url, {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ function: funcName, ...payload }),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' }
     }).then(r => r.json());
 }
@@ -101,7 +100,7 @@ function loadInitialData() {
 
 function renderAllBranches() {
     mainContent.innerHTML = '';
-    if (allData.length === 0) {
+    if (!allData || allData.length === 0) {
         mainContent.innerHTML = '<p class="text-center text-gray-500">No branches found. Admin can add a new branch.</p>';
         return;
     }
@@ -166,6 +165,7 @@ function createStaffCard(staff, branchName) {
             <button class="delete-staff-btn text-red-500 hover:text-red-700 bg-white rounded-full h-8 w-8 flex items-center justify-center shadow-md"><i class="fas fa-trash-alt"></i></button>
         </div>` : '';
 
+    // Use the Photo URL as returned by backend (already a Google Drive direct link)
     const fallbackUrl = "https://drive.google.com/uc?export=download&id=1iUQhelba6oMDa5Lb3EuZL_B4_MS4plzC";
     const photoUrl = staff['Photo URL'] && staff['Photo URL'].trim() !== "" ? staff['Photo URL'] : fallbackUrl;
 
@@ -224,12 +224,13 @@ document.getElementById('login-form').addEventListener('submit', (e) => {
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
     showLoader();
-    postData('verifyAdmin', { email, password })
+    fetchData('verifyAdmin', { email, password })
         .then(response => {
-            if (response.verified) {
+            if (response.status === 'success' && response.verified) {
                 isAdmin = true;
                 closeModal(document.getElementById('login-modal'));
                 updateAdminUI();
+                alert("Logged in as admin!");
             } else {
                 alert('Invalid credentials.');
             }
@@ -295,10 +296,8 @@ function openStaffModal(staff, branchName) {
             const header = input.dataset.header;
             input.value = staff[header] || '';
         });
-        document.getElementById('rowIndex').value = staff.rowIndex;
-        const branchData = allData.find(b => b.branchName === branchName);
-        const isFormer = branchData.formerStaff.some(s => s.rowIndex === staff.rowIndex);
-        document.getElementById('isFormer').checked = isFormer;
+        document.getElementById('rowIndex').value = staff.rowIndex || '';
+        document.getElementById('isFormer').checked = false;
     } else {
         document.getElementById('rowIndex').value = '';
         document.getElementById('isFormer').checked = false;
@@ -333,13 +332,9 @@ document.getElementById('staff-form').addEventListener('submit', e => {
     staffData.rowIndex = document.getElementById('rowIndex').value;
     staffData.isFormer = document.getElementById('isFormer').checked;
     if (tempPhotoData) staffData.photo = tempPhotoData;
-    saveStaffData(staffData);
-});
-
-function saveStaffData(data) {
     showLoader();
     closeModal(document.getElementById('staff-modal'));
-    postData('saveStaff', data)
+    postData('saveStaff', staffData)
         .then(response => {
             if (response.status === 'success') {
                 alert(response.message);
@@ -350,7 +345,7 @@ function saveStaffData(data) {
         })
         .catch(() => alert('An error occurred while saving staff data.'))
         .finally(hideLoader);
-}
+});
 
 function deleteStaffHandler(staff, branchName) {
     if (confirm(`Are you sure you want to delete ${escapeHtml(staff['Full Name'])}?`)) {
