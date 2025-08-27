@@ -1,6 +1,6 @@
 <script>
     // Paste the URL of your deployed Apps Script Web App here
-    const SCRIPT_URL = 'YOUR_DEPLOYED_WEB_APP_URL_HERE'; 
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwpC3yx4TNwq-vEJiO2HeJ54X0TPWiKLZW_yypByCkbz2Cgc5_ABafmrWoZUBZJo2Kp/exec'; 
 
     console.log("✅ JavaScript loaded");
     let allData = [];
@@ -490,4 +490,5 @@
                 hideLoader();
             });
     });
+
 </script>
