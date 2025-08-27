@@ -32,7 +32,8 @@
                     <input type="text" id="fullName" data-header="Full Name" placeholder="Full Name" class="modal-input">
                     <input type="text" id="fatherName" data-header="Father’s Name" placeholder="Father's Name" class="modal-input">
                     <input type="text" id="motherName" data-header="Mother’s Name" placeholder="Mother's Name" class="modal-input">
-                     <select id="gender" data-header="Gender" class="modal-input">
+                     <label for="gender" class="modal-label">Gender</label>
+                     <select id="gender" data-header="Gender" class="modal-input" title="Gender">
                         <option value="">Select Gender</option>
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
@@ -40,7 +41,7 @@
                     </select>
                     <div>
                       <label class="modal-label">Date of Birth</label>
-                      <input type="date" id="dateOfBirth" data-header="Date of Birth" class="modal-input">
+                      <input type="date" id="dateOfBirth" data-header="Date of Birth" class="modal-input" placeholder="Date of Birth" title="Date of Birth">
                     </div>
                     <input type="text" id="nid" data-header="NID/Birth Certificate" placeholder="NID / Birth Certificate" class="modal-input">
                 </div>
@@ -52,20 +53,20 @@
                     <input type="text" id="designation" data-header="Designation" placeholder="Designation" class="modal-input">
                     <div>
                       <label class="modal-label">Date of Joining</label>
-                      <input type="date" id="dateOfJoining" data-header="Date of Joining" class="modal-input">
+                      <input type="date" id="dateOfJoining" data-header="Date of Joining" class="modal-input" placeholder="Date of Joining" title="Date of Joining">
                     </div>
                 </div>
                 <div class="space-y-4">
                     <input type="number" id="joinSalary" data-header="Join Salary" placeholder="Join Salary" class="modal-input">
                     <div>
                       <label class="modal-label">Increment Date</label>
-                      <input type="date" id="incrementDate" data-header="Increment Date" class="modal-input">
+                      <input type="date" id="incrementDate" data-header="Increment Date" class="modal-input" placeholder="Increment Date" title="Increment Date">
                     </div>
                     <input type="number" id="salary" data-header="Salary" placeholder="Current Salary" class="modal-input">
                      <div class="space-y-2">
                         <label class="modal-label">Profile Photo</label>
-                        <img id="photo-preview" class="w-24 h-24 object-cover rounded-md bg-gray-100 mb-2">
-                        <input type="file" id="photo-upload" class="text-sm" accept="image/*">
+                        <img id="photo-preview" class="w-24 h-24 object-cover rounded-md bg-gray-100 mb-2" alt="Profile Photo Preview">
+                        <input type="file" id="photo-upload" class="text-sm" accept="image/*" title="Upload Profile Photo" placeholder="Choose profile photo">
                         <input type="hidden" id="photoUrl" data-header="Photo URL">
                     </div>
                     <div class="flex items-center">
