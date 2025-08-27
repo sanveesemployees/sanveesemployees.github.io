@@ -192,22 +192,14 @@ function createStaffCard(staff, branchName) {
         </div>` : '';
 
     const fallbackUrl = "https://drive.google.com/uc?export=download&id=1iUQhelba6oMDa5Lb3EuZL_B4_MS4plzC";
-    const photoUrl = staff['Photo URL'] || fallbackUrl;
-
-    // REMOVE these lines:
-    // const img = document.createElement("img");
-    // img.src = photoUrl;
-    // img.alt = "Staff photo";
-    // document.body.appendChild(img);
-
-    const fullName = escapeHtml(staff['Full Name'] || 'N/A');
-    const designation = escapeHtml(staff['Designation'] || 'N/A');
-    const mobile = escapeHtml(staff['Mobile'] || 'N/A');
-    const currentAddress = escapeHtml(staff['Current Address'] || 'N/A');
+    const photoUrl = staff['Photo URL'] && staff['Photo URL'].trim() !== "" ? staff['Photo URL'] : fallbackUrl;
 
     card.innerHTML = `
         <div class="relative">
-            <div class="h-40 bg-gray-200 flex items-center justify-center"><img src="${photoUrl}" alt="Photo of ${fullName}" class="h-full w-full object-cover"></div>
+            <div class="h-40 bg-gray-200 flex items-center justify-center">
+                <img src="${photoUrl}" alt="Photo of ${fullName}" class="h-full w-full object-cover"
+                     onerror="this.onerror=null;this.src='${fallbackUrl}';">
+            </div>
             ${adminCardButtons}
         </div>
         <div class="p-4">
