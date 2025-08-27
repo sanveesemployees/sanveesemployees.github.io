@@ -1,0 +1,67 @@
+<style>
+    /* Custom CSS to complement Tailwind */
+    body {
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* Animation for modals and cards */
+    .fade-in {
+        animation: fadeIn 0.3s ease-out forwards;
+    }
+    .fade-out {
+        animation: fadeOut 0.3s ease-in forwards;
+    }
+    .scale-up {
+        animation: scaleUp 0.3s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
+    }
+    .staff-card {
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+    .staff-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+    }
+    @keyframes scaleUp {
+        from { transform: scale(0.95); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+    
+    /* Reusable component classes using Tailwind's @apply directive */
+    .admin-btn {
+        @apply px-4 py-2 text-sm font-medium text-white rounded-md transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2;
+    }
+    .modal-container {
+      @apply hidden fixed inset-0 z-50 flex items-center justify-center p-4;
+    }
+    .modal-content {
+      @apply bg-white rounded-lg shadow-xl w-full max-w-md transform transition-all;
+    }
+    .modal-header {
+      @apply text-lg font-semibold text-gray-800 p-4 border-b border-gray-200 flex items-center;
+    }
+    .modal-label {
+      @apply block text-sm font-medium text-gray-700 mb-1;
+    }
+    .modal-input {
+      @apply mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm;
+    }
+    .modal-footer {
+      @apply px-6 py-4 bg-gray-50 text-right space-x-2 rounded-b-lg;
+    }
+    .btn-primary {
+      @apply inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500;
+    }
+    .btn-secondary {
+      @apply inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500;
+    }
+
+</style>
