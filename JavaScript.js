@@ -7,6 +7,9 @@ let isAdmin = false;
 let tempPhotoData = null;
 let currentBranch = '';
 
+let admins = []; // For admin management
+let currentAdmin = null; // Track current admin for settings
+
 const mainContent = document.getElementById('main-content');
 const loader = document.getElementById('loader');
 const adminLoginBtn = document.getElementById('admin-login-button');
@@ -72,6 +75,53 @@ function openPromptModal({ title, message, confirmText, callback }) {
     openModal('prompt-modal');
 }
 
+function showStaffDetailsModal(staff, branchName) {
+    const modal = document.getElementById('staff-details-modal');
+    const body = document.getElementById('staff-details-body');
+    const fallbackUrl = "https://drive.google.com/uc?export=download&id=1iUQhelba6oMDa5Lb3EuZL_B4_MS4plzC";
+    const photoUrl = staff['Photo URL'] && staff['Photo URL'].trim() !== "" ? staff['Photo URL'] : fallbackUrl;
+    const fields = [
+        { label: "Serial No", value: staff['Serial No'] || '' },
+        { label: "Full Name", value: staff['Full Name'] || '' },
+        { label: "Father’s Name", value: staff["Father’s Name"] || '' },
+        { label: "Mother’s Name", value: staff["Mother’s Name"] || '' },
+        { label: "Gender", value: staff["Gender"] || '' },
+        { label: "Date of Birth", value: staff["Date of Birth"] || '' },
+        { label: "NID / Birth Certificate", value: staff["NID/Birth Certificate"] || '' },
+        { label: "Mobile Number", value: staff["Mobile"] || '' },
+        { label: "Emergency Mobile Number", value: staff["Emergency Mobile"] || '' },
+        { label: "Permanent Address", value: staff["Permanent Address"] || '' },
+        { label: "Current Address", value: staff["Current Address"] || '' },
+        { label: "Designation", value: staff["Designation"] || '' },
+        { label: "Date of Joining", value: staff["Date of Joining"] || '' },
+        { label: "Joining Salary", value: staff["Join Salary"] || '' },
+        { label: "Increment Date", value: staff["Increment Date"] || '' },
+        { label: "Salary", value: staff["Salary"] || '' }
+    ];
+    let html = `
+        <div class="col-span-1 md:col-span-2 flex justify-center mb-4">
+            <img src="${photoUrl}" alt="Photo" class="w-32 h-32 object-cover rounded border border-gray-300" onerror="this.onerror=null;this.src='${fallbackUrl}';">
+        </div>
+    `;
+    fields.forEach(f =>
+        html += `<div><span class="font-semibold">${f.label}:</span> <span>${escapeHtml(f.value)}</span></div>`
+    );
+    body.innerHTML = html;
+    document.getElementById('staff-details-title').textContent = staff['Full Name'] || 'Staff Details';
+    // Show edit button if admin
+    const editBtn = document.getElementById('edit-staff-btn-modal');
+    if (isAdmin) {
+        editBtn.classList.remove('hidden');
+        editBtn.onclick = () => {
+            closeModal(modal);
+            openStaffModal(staff, branchName);
+        };
+    } else {
+        editBtn.classList.add('hidden');
+    }
+    openModal('staff-details-modal');
+}
+
 // --- Main Logic ---
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -79,6 +129,59 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll('.modal-close').forEach(btn => btn.onclick = () => {
         closeModal(btn.closest('.modal-container'));
     });
+
+    // Global search logic
+    const globalSearch = document.getElementById('global-search');
+    const suggestionsBox = document.getElementById('search-suggestions');
+    globalSearch.addEventListener('input', function () {
+        const query = this.value.trim().toLowerCase();
+        if (!query) {
+            suggestionsBox.classList.add('hidden');
+            suggestionsBox.innerHTML = '';
+            return;
+        }
+        let matches = [];
+        allData.forEach(branch => {
+            branch.currentStaff.concat(branch.formerStaff).forEach(staff => {
+                if (!staff['Full Name']) return;
+                if (
+                    (staff['Full Name'] && staff['Full Name'].toLowerCase().includes(query)) ||
+                    (staff['Mobile'] && staff['Mobile'].toLowerCase().includes(query))
+                ) {
+                    matches.push({ staff, branch: branch.branchName });
+                }
+            });
+        });
+        if (matches.length === 0) {
+            suggestionsBox.innerHTML = '<div class="px-3 py-2 text-gray-500">No results found</div>';
+        } else {
+            suggestionsBox.innerHTML = matches.slice(0, 10).map(({ staff, branch }) =>
+                `<div class="px-3 py-2 hover:bg-indigo-100 cursor-pointer" data-branch="${escapeHtml(branch)}" data-name="${escapeHtml(staff['Full Name'])}">
+                    <span class="font-semibold">${escapeHtml(staff['Full Name'])}</span>
+                    <span class="text-xs text-gray-500 ml-2">${escapeHtml(staff['Mobile'] || '')}</span>
+                    <span class="text-xs text-gray-400 ml-2">(${escapeHtml(branch)})</span>
+                </div>`
+            ).join('');
+        }
+        suggestionsBox.classList.remove('hidden');
+    });
+    suggestionsBox.addEventListener('mousedown', function (e) {
+        const item = e.target.closest('[data-branch][data-name]');
+        if (item) {
+            const branchName = item.getAttribute('data-branch');
+            const name = item.getAttribute('data-name');
+            let found = null;
+            allData.forEach(branch => {
+                if (branch.branchName === branchName) {
+                    found = branch.currentStaff.concat(branch.formerStaff).find(staff => staff['Full Name'] === name);
+                }
+            });
+            if (found) showStaffDetailsModal(found, branchName);
+            suggestionsBox.classList.add('hidden');
+            globalSearch.value = '';
+        }
+    });
+    document.body.addEventListener('click', () => suggestionsBox.classList.add('hidden'));
 });
 
 function loadInitialData() {
@@ -117,6 +220,7 @@ function createBranchSection(branch) {
     const adminButtons = isAdmin ? `
         <div class="space-x-2">
             <button class="add-staff-btn text-sm py-2 px-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700" data-branch="${branch.branchName}"><i class="fas fa-user-plus mr-1"></i> Add Staff</button>
+            <button class="rename-branch-btn text-sm py-2 px-3 bg-blue-600 text-white rounded-md hover:bg-blue-700" data-branch="${branch.branchName}"><i class="fas fa-edit mr-1"></i> Rename Branch</button>
             <button class="delete-branch-btn text-sm py-2 px-3 bg-red-600 text-white rounded-md hover:bg-red-700" data-branch="${branch.branchName}"><i class="fas fa-trash-alt mr-1"></i> Delete Branch</button>
         </div>` : '';
     section.innerHTML = `
@@ -139,8 +243,10 @@ function createStaffGrid(title, staffList, branchName) {
     container.innerHTML = `<h3 class="text-xl font-semibold text-gray-700 mt-6 mb-4">${title}</h3>`;
     const grid = document.createElement('div');
     grid.className = 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6';
-    if (staffList.length > 0) {
-        staffList.forEach(staff => grid.appendChild(createStaffCard(staff, branchName)));
+    // Only create cards for staff with Full Name
+    const filteredList = staffList.filter(staff => staff['Full Name'] && staff['Full Name'].trim() !== '');
+    if (filteredList.length > 0) {
+        filteredList.forEach(staff => grid.appendChild(createStaffCard(staff, branchName)));
     } else {
         grid.innerHTML = `<p class="text-gray-500 italic col-span-full">No ${title.toLowerCase()} found.</p>`;
     }
@@ -150,7 +256,7 @@ function createStaffGrid(title, staffList, branchName) {
 
 function createStaffCard(staff, branchName) {
     const card = document.createElement('div');
-    card.className = 'staff-card bg-white rounded-lg shadow-md overflow-hidden transform fade-in';
+    card.className = 'staff-card bg-white rounded-lg shadow-md overflow-hidden transform fade-in cursor-pointer';
     card.dataset.name = escapeHtml(staff['Full Name'] || '');
     card.dataset.designation = escapeHtml(staff['Designation'] || '');
 
@@ -185,9 +291,21 @@ function createStaffCard(staff, branchName) {
                 <p><i class="fas fa-map-marker-alt w-4"></i> ${currentAddress}</p>
             </div>
         </div>`;
+    // Card click opens details modal
+    card.onclick = (e) => {
+        // Prevent admin button clicks from opening details
+        if (e.target.closest('.edit-staff-btn') || e.target.closest('.delete-staff-btn')) return;
+        showStaffDetailsModal(staff, branchName);
+    };
     if (isAdmin) {
-        card.querySelector('.edit-staff-btn').onclick = () => openStaffModal(staff, branchName);
-        card.querySelector('.delete-staff-btn').onclick = () => deleteStaffHandler(staff, branchName);
+        card.querySelector('.edit-staff-btn').onclick = (ev) => {
+            ev.stopPropagation();
+            openStaffModal(staff, branchName);
+        };
+        card.querySelector('.delete-staff-btn').onclick = (ev) => {
+            ev.stopPropagation();
+            deleteStaffHandler(staff, branchName);
+        };
     }
     return card;
 }
@@ -228,6 +346,7 @@ document.getElementById('login-form').addEventListener('submit', (e) => {
         .then(response => {
             if (response.status === 'success' && response.verified) {
                 isAdmin = true;
+                currentAdmin = { email }; // Track current admin
                 closeModal(document.getElementById('login-modal'));
                 updateAdminUI();
                 alert("Logged in as admin!");
@@ -279,6 +398,26 @@ mainContent.addEventListener('click', e => {
     if (addBtn) {
         const branchName = addBtn.dataset.branch;
         openStaffModal(null, branchName);
+    }
+    const renameBtn = e.target.closest('.rename-branch-btn');
+    if (renameBtn) {
+        const branchName = renameBtn.dataset.branch;
+        openPromptModal({
+            title: "Rename Branch",
+            message: `Enter a new name for branch "${branchName}":`,
+            confirmText: "Rename",
+            callback: (newName) => {
+                if (!newName) { alert('Branch name cannot be empty.'); return; }
+                showLoader();
+                postData('renameBranch', { oldName: branchName, newName })
+                    .then(response => {
+                        alert(response.message);
+                        loadInitialData();
+                    })
+                    .catch(() => alert('An error occurred while renaming the branch.'))
+                    .finally(hideLoader);
+            }
+        });
     }
 });
 
@@ -379,3 +518,74 @@ document.getElementById('password-form').addEventListener('submit', (e) => {
         .catch(() => alert('An error occurred while changing the password.'))
         .finally(hideLoader);
 });
+
+// --- Admin Settings Modal Logic ---
+
+document.getElementById('admin-settings-btn').onclick = () => {
+    // Populate current admin email if available
+    document.getElementById('admin-edit-email').value = currentAdmin ? currentAdmin.email : '';
+    document.getElementById('admin-edit-password').value = '';
+    document.getElementById('new-admin-email').value = '';
+    document.getElementById('new-admin-password').value = '';
+    document.getElementById('assign-permissions-section').classList.add('hidden');
+    openModal('admin-settings-modal');
+};
+
+document.getElementById('save-admin-credentials').onclick = () => {
+    const email = document.getElementById('admin-edit-email').value.trim();
+    const password = document.getElementById('admin-edit-password').value.trim();
+    if (!email || !password) { alert('Email and password required.'); return; }
+    showLoader();
+    postData('updateAdminCredentials', { email, password })
+        .then(response => {
+            alert(response.message);
+            closeModal(document.getElementById('admin-settings-modal'));
+        })
+        .catch(() => alert('Error updating credentials.'))
+        .finally(hideLoader);
+};
+
+document.getElementById('assign-admin-btn').onclick = () => {
+    const email = document.getElementById('new-admin-email').value.trim();
+    const password = document.getElementById('new-admin-password').value.trim();
+    if (!email || !password) { alert('Email and password required.'); return; }
+    showLoader();
+    postData('createAdmin', { email, password })
+        .then(response => {
+            if (response.status === 'success') {
+                // Show permissions UI
+                const permSection = document.getElementById('assign-permissions-section');
+                permSection.classList.remove('hidden');
+                // List all branches with checkboxes
+                const list = document.getElementById('branch-permissions-list');
+                list.innerHTML = '';
+                allData.forEach(branch => {
+                    const id = `perm-${branch.branchName.replace(/\s+/g, '-')}`;
+                    list.innerHTML += `<div><label><input type="checkbox" class="branch-perm" value="${branch.branchName}" id="${id}"> ${escapeHtml(branch.branchName)}</label></div>`;
+                });
+                // Save permissions
+                document.getElementById('save-permissions-btn').onclick = () => {
+                    const perms = Array.from(document.querySelectorAll('.branch-perm:checked')).map(cb => cb.value);
+                    if (perms.length === 0) { alert('Select at least one branch.'); return; }
+                    showLoader();
+                    postData('setAdminPermissions', { email, branches: perms })
+                        .then(resp => {
+                            alert(resp.message);
+                            closeModal(document.getElementById('admin-settings-modal'));
+                        })
+                        .catch(() => alert('Error saving permissions.'))
+                        .finally(hideLoader);
+                };
+            } else {
+                alert(response.message);
+            }
+        })
+        .catch(() => alert('Error creating admin.'))
+        .finally(hideLoader);
+};
+
+document.getElementById('admin-logout-btn').onclick = () => {
+    isAdmin = false;
+    updateAdminUI();
+    closeModal(document.getElementById('admin-settings-modal'));
+};
