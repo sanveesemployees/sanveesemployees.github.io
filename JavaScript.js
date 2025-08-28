@@ -126,6 +126,10 @@ function showStaffDetailsModal(staff, branchName) {
 
 document.addEventListener("DOMContentLoaded", () => {
     loadInitialData();
+    // Ensure all modals are hidden on load, especially admin settings modal
+    document.querySelectorAll('.modal-container').forEach(modal => {
+        modal.classList.add('hidden');
+    });
     document.querySelectorAll('.modal-close').forEach(btn => btn.onclick = () => {
         closeModal(btn.closest('.modal-container'));
     });
