@@ -46,10 +46,13 @@
     </main>
 
     <!-- Modals Start -->
-    <div id="modal-backdrop" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-50 transition-opacity" aria-hidden="true" style="display:none;"></div>
+        <div id="modal-backdrop" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-50 transition-opacity" aria-hidden="true" style="display:none;"></div>
+        <style>
+            .modal-container { display: none !important; }
+        </style>
 
     <!-- Admin Login Modal -->
-    <div id="login-modal" class="modal-container hidden">
+    <div id="login-modal" class="modal-container hidden" style="display:none;">
         <div class="modal-content">
             <h3 class="modal-header"><i class="fas fa-user-shield mr-3"></i>Admin Login</h3>
             <form id="login-form">
@@ -72,7 +75,7 @@
     </div>
 
     <!-- Staff Modal (Add/Edit Staff) -->
-    <div id="staff-modal" class="modal-container hidden">
+    <div id="staff-modal" class="modal-container hidden" style="display:none;">
         <div class="modal-content max-w-4xl">
             <h3 id="staff-modal-title" class="modal-header">Add New Staff</h3>
             <form id="staff-form">
@@ -124,7 +127,7 @@
     </div>
 
     <!-- Prompt Modal (for branch name, etc.) -->
-    <div id="prompt-modal" class="modal-container hidden">
+    <div id="prompt-modal" class="modal-container hidden" style="display:none;">
         <div class="modal-content">
             <h3 id="prompt-title" class="modal-header"></h3>
             <div class="p-6">
@@ -139,7 +142,7 @@
     </div>
 
     <!-- Change Password Modal -->
-    <div id="password-modal" class="modal-container hidden">
+    <div id="password-modal" class="modal-container hidden" style="display:none;">
         <div class="modal-content">
             <h3 class="modal-header"><i class="fas fa-key mr-3"></i>Change Password</h3>
             <form id="password-form">
@@ -162,7 +165,7 @@
     </div>
 
     <!-- Staff Details Modal -->
-    <div id="staff-details-modal" class="modal-container hidden">
+    <div id="staff-details-modal" class="modal-container hidden" style="display:none;">
         <div class="modal-content max-w-2xl">
             <h3 class="modal-header flex items-center">
                 <i class="fas fa-id-card mr-3"></i>
