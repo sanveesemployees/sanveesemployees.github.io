@@ -32,7 +32,7 @@
                     <button id="change-password-button" class="admin-btn bg-yellow-500 hover:bg-yellow-600"><i class="fas fa-key mr-2"></i>Change Password</button>
                     <button id="logout-button" class="admin-btn bg-red-500 hover:bg-red-600"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button>
                     <!-- Settings Icon -->
-                    <button id="admin-settings-btn" class="admin-btn bg-gray-500 hover:bg-gray-600"><i class="fas fa-cog"></i></button>
+                    <button id="admin-settings-btn" class="admin-btn bg-gray-500 hover:bg-gray-600" title="Admin Settings"><i class="fas fa-cog"></i></button>
                 </div>
             </div>
         </div>
@@ -46,7 +46,7 @@
     </main>
 
     <!-- Modals Start -->
-    <div id="modal-backdrop" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-50 transition-opacity" aria-hidden="true"></div>
+    <div id="modal-backdrop" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-50 transition-opacity" aria-hidden="true" style="display:none;"></div>
 
     <!-- Admin Login Modal -->
     <div id="login-modal" class="modal-container hidden">
@@ -179,7 +179,7 @@
     </div>
 
     <!-- Admin Settings Modal -->
-    <div id="admin-settings-modal" class="modal-container hidden">
+    <div id="admin-settings-modal" class="modal-container hidden" style="display:none;">
         <div class="modal-content max-w-lg">
             <h3 class="modal-header"><i class="fas fa-cog mr-3"></i>Admin Settings</h3>
             <div class="p-6 space-y-4">
