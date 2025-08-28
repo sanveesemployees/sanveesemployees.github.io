@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Branch Staff Directory</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="Styles.css">
+</head>
+<body class="bg-gray-50 font-sans text-gray-800">
+
+<div id="app" class="min-h-screen">
+    <header class="bg-white shadow-md sticky top-0 z-40">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-sitemap text-2xl text-indigo-600"></i>
+                    <h1 class="text-xl font-bold ml-3 text-gray-800">Branch Staff Directory</h1>
+                </div>
+                <!-- Global Search Bar -->
+                <div class="relative w-72 mx-4">
+                    <input id="global-search" type="text" class="modal-input w-full" placeholder="Search by Name or Mobile...">
+                    <div id="search-suggestions" class="absolute z-50 bg-white border border-gray-200 rounded shadow mt-1 w-full hidden"></div>
+                </div>
+                <button id="admin-login-button" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
+                    <i class="fas fa-user-shield mr-2"></i>Admin Login
+                </button>
+                <div id="admin-controls" class="hidden items-center space-x-4">
+                    <button id="add-branch-button" class="admin-btn bg-green-500 hover:bg-green-600"><i class="fas fa-plus-circle mr-2"></i>Add Branch</button>
+                    <button id="rename-branch-button" class="admin-btn bg-blue-500 hover:bg-blue-600"><i class="fas fa-edit mr-2"></i>Rename Branch</button>
+                    <button id="change-password-button" class="admin-btn bg-yellow-500 hover:bg-yellow-600"><i class="fas fa-key mr-2"></i>Change Password</button>
+                    <button id="logout-button" class="admin-btn bg-red-500 hover:bg-red-600"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button>
+                    <!-- Settings Icon -->
+                    <button id="admin-settings-btn" class="admin-btn bg-gray-500 hover:bg-gray-600"><i class="fas fa-cog"></i></button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main id="main-content" class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <div id="loader" class="text-center py-20">
+            <i class="fas fa-spinner fa-spin text-4xl text-indigo-500"></i>
+            <p class="mt-4 text-lg text-gray-600">Loading Staff Data...</p>
+        </div>
+    </main>
+
+    <!-- Modals Start -->
+    <div id="modal-backdrop" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-50 transition-opacity" aria-hidden="true"></div>
+
+    <!-- Admin Login Modal -->
+    <div id="login-modal" class="modal-container hidden">
+        <div class="modal-content">
+            <h3 class="modal-header"><i class="fas fa-user-shield mr-3"></i>Admin Login</h3>
+            <form id="login-form">
+                <div class="space-y-4 p-6">
+                    <div>
+                        <label for="email" class="modal-label">Email</label>
+                        <input type="email" id="email" class="modal-input" placeholder="admin@example.com" required>
+                    </div>
+                    <div>
+                        <label for="password" class="modal-label">Password</label>
+                        <input type="password" id="password" class="modal-input" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary modal-close">Cancel</button>
+                    <button type="submit" class="btn-primary">Login</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Staff Modal (Add/Edit Staff) -->
+    <div id="staff-modal" class="modal-container hidden">
+        <div class="modal-content max-w-4xl">
+            <h3 id="staff-modal-title" class="modal-header">Add New Staff</h3>
+            <form id="staff-form">
+                <input type="hidden" id="rowIndex">
+                <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="modal-label">Full Name</label>
+                            <input type="text" class="modal-input" data-header="Full Name" required placeholder="Enter full name" title="Full Name">
+                        </div>
+                        <div>
+                            <label class="modal-label">Designation</label>
+                            <input type="text" class="modal-input" data-header="Designation" required placeholder="Enter designation" title="Designation">
+                        </div>
+                        <div>
+                            <label class="modal-label">Mobile</label>
+                            <input type="text" class="modal-input" data-header="Mobile" placeholder="Enter mobile number" title="Mobile">
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="modal-label">Current Address</label>
+                            <input type="text" class="modal-input" data-header="Current Address" placeholder="Enter current address" title="Current Address">
+                        </div>
+                        <div>
+                            <label class="modal-label">Photo URL</label>
+                            <input type="text" class="modal-input" data-header="Photo URL" placeholder="Enter photo URL" title="Photo URL">
+                        </div>
+                        <div>
+                            <label class="modal-label">Upload Photo</label>
+                            <input type="file" id="photo-upload" accept="image/*" class="modal-input" title="Upload Photo" placeholder="Upload Photo">
+                            <img id="photo-preview" src="" alt="Photo Preview" class="mt-2 rounded w-24 h-24 object-cover border border-gray-300">
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="modal-label flex items-center">
+                                <input type="checkbox" id="isFormer" class="mr-2"> Mark as Former Staff
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary modal-close">Cancel</button>
+                    <button type="submit" class="btn-primary" id="save-staff-btn">Save Staff</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Prompt Modal (for branch name, etc.) -->
+    <div id="prompt-modal" class="modal-container hidden">
+        <div class="modal-content">
+            <h3 id="prompt-title" class="modal-header"></h3>
+            <div class="p-6">
+                <p id="prompt-message" class="text-sm text-gray-600 mb-4"></p>
+                <input type="text" id="prompt-input" class="modal-input" placeholder="Enter value here">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary modal-close">Cancel</button>
+                <button type="button" id="prompt-confirm" class="btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="password-modal" class="modal-container hidden">
+        <div class="modal-content">
+            <h3 class="modal-header"><i class="fas fa-key mr-3"></i>Change Password</h3>
+            <form id="password-form">
+                <div class="space-y-4 p-6">
+                    <div>
+                        <label for="current-password" class="modal-label">Current Password</label>
+                        <input type="password" id="current-password" class="modal-input" required>
+                    </div>
+                    <div>
+                        <label for="new-password" class="modal-label">New Password</label>
+                        <input type="password" id="new-password" class="modal-input" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary modal-close">Cancel</button>
+                    <button type="submit" class="btn-primary">Update Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Staff Details Modal -->
+    <div id="staff-details-modal" class="modal-container hidden">
+        <div class="modal-content max-w-2xl">
+            <h3 class="modal-header flex items-center">
+                <i class="fas fa-id-card mr-3"></i>
+                <span id="staff-details-title">Staff Details</span>
+            </h3>
+            <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4" id="staff-details-body">
+                <!-- Populated by JS -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary modal-close">Close</button>
+                <button type="button" class="btn-primary hidden" id="edit-staff-btn-modal">Edit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Settings Modal -->
+    <div id="admin-settings-modal" class="modal-container hidden">
+        <div class="modal-content max-w-lg">
+            <h3 class="modal-header"><i class="fas fa-cog mr-3"></i>Admin Settings</h3>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="modal-label">Edit Email</label>
+                    <input type="email" id="admin-edit-email" class="modal-input" placeholder="New Email">
+                </div>
+                <div>
+                    <label class="modal-label">Edit Password</label>
+                    <input type="password" id="admin-edit-password" class="modal-input" placeholder="New Password">
+                </div>
+                <div>
+                    <button type="button" class="btn-primary" id="save-admin-credentials">Save</button>
+                </div>
+                <hr>
+                <div>
+                    <label class="modal-label">Assign New Admin</label>
+                    <input type="email" id="new-admin-email" class="modal-input mb-2" placeholder="New Admin Email">
+                    <input type="password" id="new-admin-password" class="modal-input mb-2" placeholder="New Admin Password">
+                    <button type="button" class="btn-primary" id="assign-admin-btn">Assign Admin</button>
+                </div>
+                <div id="assign-permissions-section" class="hidden">
+                    <label class="modal-label">Assign Branch Permissions</label>
+                    <div id="branch-permissions-list" class="space-y-2"></div>
+                    <button type="button" class="btn-primary" id="save-permissions-btn">Save Permissions</button>
+                </div>
+                <hr>
+                <button type="button" class="btn-secondary" id="admin-logout-btn">Log Out</button>
+            </div>
+        </div>
+    </div>
+    <!-- Modals End -->
+</div>
+
+<script src="JavaScript.js"></script>
+</body>
+</html>
