@@ -80,14 +80,23 @@ function $$(sel) { return Array.from(document.querySelectorAll(sel)); }
 function fetchData(funcName, params = {}) {
   const url = new URL(SCRIPT_URL);
   url.searchParams.append('function', funcName);
-  for (const key in params) url.searchParams.append(key, params[key]);
+  const token = localStorage.getItem('adminSessionToken');
+  const merged = Object.assign({}, params || {}, token ? { sessionToken: token } : {});
+  for (const key in merged) url.searchParams.append(key, merged[key]);
   return fetch(url).then(r => r.json());
 }
 function postData(funcName, payload) {
   const url = new URL(SCRIPT_URL);
+  // Auto-attach session token unless explicitly overridden
+  const token = localStorage.getItem('adminSessionToken');
+  const merged = Object.assign(
+    { function: funcName },
+    token ? { sessionToken: token } : {},
+    payload || {}
+  );
   return fetch(url, {
     method: 'POST',
-    body: JSON.stringify({ function: funcName, ...payload }),
+    body: JSON.stringify(merged),
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }
   }).then(r => r.json());
 }
@@ -100,6 +109,23 @@ function showLoader() {
 function hideLoader() {
   const loader = $('#loader');
   if (loader) loader.classList.add('hidden');
+}
+
+// Small helper: toggle loading state on buttons (adds spinner via CSS)
+function setButtonLoading(btn, isLoading, loadingText) {
+  if (!btn) return;
+  if (isLoading) {
+    btn.dataset.originalText = btn.dataset.originalText || btn.innerHTML;
+    if (loadingText) btn.innerHTML = loadingText;
+    btn.classList.add('is-loading');
+    btn.setAttribute('aria-busy', 'true');
+    btn.disabled = true;
+  } else {
+    if (btn.dataset.originalText) btn.innerHTML = btn.dataset.originalText;
+    btn.classList.remove('is-loading');
+    btn.removeAttribute('aria-busy');
+    btn.disabled = false;
+  }
 }
 
 // === MODAL MANAGEMENT ===
@@ -144,6 +170,339 @@ function adminHasBranch(branchName) {
   if (CURRENT_ADMIN_PERMS.isMain) return true;
   return (CURRENT_ADMIN_PERMS.branches||[]).indexOf(branchName) !== -1;
 }
+// Frontend rights catalog to render checkboxes in modal
+const RIGHTS_CATALOG = [
+  { key: 'canAddBranch', label: 'Can Add Branch' },
+  { key: 'canDeleteBranch', label: 'Can Delete Branch' },
+  { key: 'canRenameBranch', label: 'Can Rename Branch' },
+  { key: 'canEditStaff', label: 'Can Edit Staff' },
+  { key: 'canDeleteStaff', label: 'Can Delete Staff' },
+  { key: 'canMoveStaff', label: 'Can Move Staff' },
+  { key: 'canUpdatePhotos', label: 'Can Update Photos' },
+  { key: 'canManagePermissions', label: 'Can Manage Permissions' },
+  { key: 'canManageAdmins', label: 'Can Manage Admins' }
+];
+
+// Utility: get branch names from loaded data
+function getAllBranchNames() {
+  return (allData || []).map(b => b.branchName);
+}
+
+// Populate a <select> element with branch options
+function populateBranchSelect(selectEl) {
+  if (!selectEl) return;
+  const branches = getAllBranchNames();
+  selectEl.innerHTML = '';
+  branches.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    selectEl.appendChild(opt);
+  });
+}
+
+// Populate Assign tab permissions section (branches only)
+function populatePermissionsSection() {
+  const container = $('#branch-permissions-list');
+  if (!container) return;
+  const branches = getAllBranchNames();
+  container.innerHTML = '';
+  branches.forEach(name => {
+    const id = `assign-branch-${name.replace(/[^a-z0-9]/gi,'_')}`;
+    const row = document.createElement('label');
+    row.className = 'flex items-center gap-2 text-sm';
+    row.innerHTML = `<input type="checkbox" id="${id}" value="${escapeHtml(name)}"> <span>${escapeHtml(name)}</span>`;
+    container.appendChild(row);
+  });
+}
+
+// Admin settings tab switching
+function activateAdminSettingsTab(tabId) {
+  ['admin-tab-credentials','admin-tab-assign','admin-tab-users'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', id === tabId);
+  });
+  const panels = {
+    'admin-tab-credentials': 'admin-panel-credentials',
+    'admin-tab-assign': 'admin-panel-assign',
+    'admin-tab-users': 'admin-panel-users'
+  };
+  Object.keys(panels).forEach(tab => {
+    const panelEl = document.getElementById(panels[tab]);
+    if (panelEl) panelEl.classList.toggle('hidden', tab !== tabId);
+  });
+}
+
+// Render admins list with edit buttons
+function renderAdminsList(admins) {
+  const list = $('#all-admins-list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!admins || !admins.length) {
+    list.innerHTML = '<div class="text-gray-500 text-sm">No admins found.</div>';
+    return;
+  }
+  admins.forEach(a => {
+    const item = document.createElement('div');
+    item.className = 'admin-user-item flex justify-between items-center py-2 border-b';
+    const rightsSummary = RIGHTS_CATALOG.filter(r => !!(a.rights && a.rights[r.key])).map(r => r.label).join(', ') || 'No special rights';
+    const branchesSummary = (a.branches || []).join(', ') || 'No branches';
+    const canDelete = !!(CURRENT_ADMIN_PERMS && CURRENT_ADMIN_PERMS.isMain);
+    item.innerHTML = `
+      <div>
+        <div class="font-semibold">${escapeHtml(a.email || '')}</div>
+        <div class="text-xs text-gray-600">Branches: ${escapeHtml(branchesSummary)}</div>
+        <div class="text-xs text-gray-600">Rights: ${escapeHtml(rightsSummary)}</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="btn-secondary" data-action="edit-admin" data-email="${escapeHtml(a.email)}">
+          <i class="fas fa-edit mr-1"></i> Edit
+        </button>
+        ${canDelete ? `<button class="btn-secondary" data-action="delete-admin" data-email="${escapeHtml(a.email)}">
+          <i class="fas fa-trash-alt mr-1"></i> Delete
+        </button>` : ''}
+      </div>`;
+    list.appendChild(item);
+  });
+  // Delegate edit buttons
+  // Ensure we don't add multiple listeners if this function re-runs
+  if (!list.__adminsListBound) {
+    list.addEventListener('click', async (e) => {
+      const editBtn = e.target.closest('[data-action="edit-admin"]');
+      if (editBtn) {
+        const email = editBtn.getAttribute('data-email');
+        const admin = admins.find(x => x.email === email);
+        openEditAdminModal(admin);
+        return;
+      }
+      const delBtn = e.target.closest('[data-action="delete-admin"]');
+      if (delBtn) {
+        const email = delBtn.getAttribute('data-email');
+        if (!CURRENT_ADMIN_PERMS || !CURRENT_ADMIN_PERMS.isMain) {
+          return showNotification('Only the super admin can delete admins.', 'error');
+        }
+        const ok = await showConfirmModal({ title: 'Delete Admin', message: `Are you sure you want to delete admin ${email}? This action cannot be undone.`, confirmText: 'Delete', cancelText: 'Cancel' });
+        if (!ok) return;
+        try {
+          showLoader();
+          const res = await postData('deleteAdmin', { email });
+          if (res.status === 'success') {
+            showNotification('Admin deleted successfully.', 'success');
+            const out = await fetchData('getAllAdmins');
+            if (out.status === 'success') renderAdminsList(out.admins || []);
+          } else {
+            showNotification(res.message || 'Failed to delete admin.', 'error');
+          }
+        } catch (err) {
+          handleError(err, 'Failed to delete admin');
+        } finally {
+          hideLoader();
+        }
+      }
+    });
+    list.__adminsListBound = true;
+  }
+}
+
+function openEditAdminModal(admin) {
+  if (!admin) return;
+  // Use unified permissions modal; backend does not return passwords
+  openAdminPermissionsModal({
+    mode: 'edit',
+    email: admin.email,
+    password: '', // do not prefill; allow optional reset in modal
+    branches: admin.branches || [],
+    rights: admin.rights || {},
+  });
+}
+
+// Top-level: unified Admin Permissions modal opener (accessible from anywhere)
+function openAdminPermissionsModal(opts) {
+  const mode = opts.mode;
+  const m = $('#admin-permissions-modal');
+  $('#admin-permissions-title-text').textContent = mode === 'new' ? 'Assign Admin' : 'Edit Admin';
+  const emailField = $('#admin-permissions-email');
+  const pwField = $('#admin-permissions-password');
+  const pwReset = $('#admin-permissions-password-reset');
+  emailField.value = opts.email || '';
+  pwField.value = opts.password || '';
+  emailField.readOnly = mode !== 'new';
+  // Branches
+  const branchDiv = $('#admin-perm-branches');
+  branchDiv.innerHTML = '';
+  (allData||[]).forEach(branch => {
+    const id = 'perm-branch-' + branch.branchName.replace(/\s/g,'-');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = branch.branchName;
+    cb.id = id;
+    if ((opts.branches||[]).includes(branch.branchName)) cb.checked = true;
+    const label = document.createElement('label');
+    label.className = 'inline-flex items-center gap-2';
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(' ' + branch.branchName));
+    branchDiv.appendChild(label);
+  });
+  // Rights - full schema mirrored from backend getRightsSchema
+  const rightsDiv = $('#admin-perm-rights');
+  rightsDiv.innerHTML = '';
+  const RIGHTS = [
+    { key: 'canAddBranch', label: 'Can add branch' },
+    { key: 'canDeleteBranch', label: 'Can delete branch' },
+    { key: 'canRenameBranch', label: 'Can rename branch' },
+    { key: 'canEditStaff', label: 'Can edit staff' },
+    { key: 'canDeleteStaff', label: 'Can delete staff' },
+    { key: 'canMoveStaff', label: 'Can move staff' },
+    { key: 'canUpdatePhotos', label: 'Can update photos' },
+    { key: 'canManagePermissions', label: 'Can manage permissions' },
+    { key: 'canManageAdmins', label: 'Can manage admins' },
+  ];
+  RIGHTS.forEach(r => {
+    const id = 'perm-right-' + r.key;
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.id = id;
+    cb.value = r.key;
+    if (opts.rights && opts.rights[r.key]) cb.checked = true;
+    const label = document.createElement('label');
+    label.className = 'inline-flex items-center gap-2';
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(' ' + r.label));
+    rightsDiv.appendChild(label);
+  });
+  // Password reset for edit
+  if (pwReset) {
+    pwReset.classList.toggle('hidden', mode!=='edit');
+    pwReset.onclick = () => {
+      pwField.value = '';
+      pwField.placeholder = 'Enter new password';
+      pwField.focus();
+    }
+  }
+  m.classList.remove('hidden');
+  $('#modal-backdrop').classList.remove('hidden');
+  // Ensure an inline status area exists for feedback
+  let statusArea = m.querySelector('.admin-perm-status');
+  if (!statusArea) {
+    statusArea = document.createElement('div');
+    statusArea.className = 'admin-perm-status text-sm mb-3';
+    m.querySelector('form')?.prepend(statusArea);
+  }
+  statusArea.textContent = '';
+  statusArea.style.color = '#4b5563';
+
+  // Save handler (one at a time)
+  const form = $('#admin-permissions-form');
+  form.onsubmit = ev => {
+    ev.preventDefault();
+    const email = emailField.value.trim();
+    const password = pwField.value.trim();
+    const branchList = Array.from(branchDiv.querySelectorAll('input[type=checkbox]')).filter(cb=>cb.checked).map(cb=>cb.value);
+    const rightsObj = {};
+    rightsDiv.querySelectorAll('input[type=checkbox]').forEach(cb=>{ rightsObj[cb.value]=cb.checked; });
+    if (!email || !password || branchList.length===0) {
+      statusArea.textContent = 'Email, password and at least one branch are required.';
+      statusArea.style.color = '#dc2626';
+      showNotification('Email, password and at least one branch required.','error');
+      return;
+    }
+    showLoader();
+    const payload = {
+      email,
+      password,
+      allowedBranches: JSON.stringify(branchList),
+      rights: rightsObj,
+    };
+    const api = mode==='edit' ? 'updateAdmin' : 'assignAdmin';
+    postData(api, payload)
+      .then(resp => {
+        showNotification(resp.message, resp.status==='success'?'success':'error');
+        if (resp.status==='success') {
+          statusArea.textContent = 'Saved successfully';
+          statusArea.style.color = '#16a34a';
+          closeModal(m);
+          // refresh list if open
+          if ($('#all-admins-list')) {
+            fetchData('getAllAdmins').then(json=>{
+              if (json && json.status==='success') renderAdminsList(json.admins||[]);
+            }).catch(()=>{});
+          }
+        }
+      })
+      .catch(err => {
+        statusArea.textContent = 'Save failed';
+        statusArea.style.color = '#dc2626';
+        handleError(err, 'Failed to save admin');
+      })
+      .finally(hideLoader);
+  };
+}
+
+// Reusable confirmation modal; returns a Promise<boolean>
+function showConfirmModal({ title = 'Confirm', message = '', confirmText = 'Confirm', cancelText = 'Cancel' } = {}) {
+  return new Promise(resolve => {
+    let modal = document.getElementById('confirm-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'confirm-modal';
+      modal.className = 'modal-container fixed inset-0 z-50 flex items-center justify-center';
+      modal.innerHTML = `
+        <div class="modal-content bg-white rounded shadow-lg w-full max-w-md p-5">
+          <div class="text-lg font-semibold mb-2" id="confirm-title"></div>
+          <div class="text-sm text-gray-700 mb-4" id="confirm-message"></div>
+          <div class="flex justify-end gap-2">
+            <button id="confirm-cancel" class="btn-secondary">${cancelText}</button>
+            <button id="confirm-ok" class="btn-primary">${confirmText}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+    }
+    modal.querySelector('#confirm-title').textContent = title;
+    modal.querySelector('#confirm-message').textContent = message;
+    $('#modal-backdrop').classList.remove('hidden');
+    modal.classList.remove('hidden');
+    const cleanup = (val) => {
+      modal.classList.add('hidden');
+      $('#modal-backdrop').classList.add('hidden');
+      resolve(val);
+    };
+    const okBtn = modal.querySelector('#confirm-ok');
+    const cancelBtn = modal.querySelector('#confirm-cancel');
+    const onOk = () => { okBtn.removeEventListener('click', onOk); cancelBtn.removeEventListener('click', onCancel); cleanup(true); };
+    const onCancel = () => { okBtn.removeEventListener('click', onOk); cancelBtn.removeEventListener('click', onCancel); cleanup(false); };
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+}
+
+function populateModalPermissions(admin) {
+  // Branches
+  const branchesWrap = $('#admin-perm-branches');
+  const rightsWrap = $('#admin-perm-rights');
+  if (branchesWrap) {
+    branchesWrap.innerHTML = '';
+    const branches = getAllBranchNames();
+    branches.forEach(name => {
+      const id = `modal-branch-${name.replace(/[^a-z0-9]/gi,'_')}`;
+      const row = document.createElement('label');
+      row.className = 'flex items-center gap-2 text-sm';
+      const checked = Array.isArray(admin.branches) && admin.branches.includes(name) ? 'checked' : '';
+      row.innerHTML = `<input type="checkbox" id="${id}" value="${escapeHtml(name)}" ${checked}> <span>${escapeHtml(name)}</span>`;
+      branchesWrap.appendChild(row);
+    });
+  }
+  // Rights
+  if (rightsWrap) {
+    rightsWrap.innerHTML = '';
+    RIGHTS_CATALOG.forEach(r => {
+      const id = `modal-right-${r.key}`;
+      const row = document.createElement('label');
+      row.className = 'flex items-center gap-2 text-sm';
+      const checked = admin.rights && admin.rights[r.key] ? 'checked' : '';
+      row.innerHTML = `<input type="checkbox" id="${id}" value="${r.key}" ${checked}> <span>${escapeHtml(r.label)}</span>`;
+      rightsWrap.appendChild(row);
+    });
+  }
+}
 async function checkAdminSession() {
   const token = localStorage.getItem('adminSessionToken');
   if (!token) {
@@ -153,7 +512,11 @@ async function checkAdminSession() {
   try {
     const response = await fetchData('checkSession', { sessionToken: token });
     if (response.valid) {
-      setAdminMode(true);
+      // Enrich admin mode with returned rights/branches/isMain
+      const isMain = !!response.isMain;
+      const rights = response.rights || {};
+      const branches = response.branches || [];
+      setAdminMode(true, { isMain, rights, branches });
       currentAdmin = { email: response.email };
     } else {
       localStorage.removeItem('adminSessionToken');
@@ -193,6 +556,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Attach loader UI
   hideLoader();
+  // Initialize AOS if available (added in index.html)
+  try {
+    if (window.AOS) {
+      AOS.init({
+        duration: 500,
+        easing: 'ease-out-cubic',
+        once: true,
+        offset: 40,
+        // Respect reduced motion
+        disable: function() {
+          return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        }
+      });
+    }
+  } catch (e) { /* no-op */ }
   loadInitialData();
   setupAllEventListeners();
 });
@@ -207,41 +585,68 @@ function setupAllEventListeners() {
   const logoutBtn = $('#logout-button');
   if (logoutBtn) {
     logoutBtn.onclick = () => {
-      setAdminMode(false);
       localStorage.removeItem('adminSessionToken');
-      updateAdminUI();
-      loadInitialData(); // <-- Refresh the UI for user interface
-      showNotification('Logged out.','info',2000);
+      setAdminMode(false);
+      showNotification('Logged out successfully', 'info');
+      loadInitialData();
     };
   }
-  // Admin settings modal button
-  if ($('#admin-settings-btn')) {
-    $('#admin-settings-btn').onclick = () => {
+
+  // Admin settings entry
+  const adminSettingsBtn = $('#admin-settings-btn');
+  if (adminSettingsBtn) {
+    adminSettingsBtn.onclick = () => {
+      if (!adminHasRight('canManageAdmins') && !adminHasRight('canManagePermissions')) {
+        showNotification('You do not have permission to open Admin Settings.', 'error');
+        return;
+      }
       if (!isAdmin) return;
       $('#admin-edit-email').value = currentAdmin ? currentAdmin.email : '';
       $('#admin-edit-password').value = '';
       $('#new-admin-email').value = '';
       $('#new-admin-password').value = '';
       $('#assign-permissions-section').classList.add('hidden');
+      activateAdminSettingsTab('admin-tab-credentials');
       openModal('admin-settings-modal');
     };
   }
   // Password/modal save handlers
-  if ($('#save-admin-credentials')) {
-    $('#save-admin-credentials').onclick = () => {
-      const email = $('#admin-edit-email').value.trim();
-      const password = $('#admin-edit-password').value.trim();
-      if (!email || !password) {
-        showNotification('Email and password required.', 'error'); return;
-      }
-      showLoader();
-      postData('updateAdminCredentials', { email, password })
-        .then(response => {
-          showNotification(response.message, 'success');
-          closeModal($('#admin-settings-modal'));
-        })
-        .catch(e => handleError(e, 'Error updating credentials'))
-        .finally(hideLoader);
+  const savePermsBtn = $('#save-admin-credentials');
+  if (savePermsBtn) {
+    savePermsBtn.onclick = async () => {
+      if (!adminHasRight('canManagePermissions')) return showNotification('Permission denied: Manage Permissions', 'error');
+      const email = $('#new-admin-email') && $('#new-admin-email').value.trim();
+      const password = $('#new-admin-password') && $('#new-admin-password').value.trim();
+      if (!email || !password) return showNotification('Provide the admin email and password first.', 'error');
+      const branches = Array.from(document.querySelectorAll('#branch-permissions-list input[type="checkbox"]:checked')).map(c => c.value);
+      setButtonLoading(savePermsBtn, true, 'Saving...');
+      try {
+        const res = await postData('updateAdmin', { email, password, allowedBranches: branches, rights: {} });
+        showNotification(res.message || 'Permissions saved.', res.status === 'success' ? 'success' : 'error');
+      } catch (e) { handleError(e, 'Failed to save permissions'); }
+      finally { setButtonLoading(savePermsBtn, false); }
+    };
+  }
+
+  // Save from Admin Permissions modal
+  const modalSaveBtn = $('#admin-permissions-save-btn');
+  if (modalSaveBtn) {
+    modalSaveBtn.onclick = async (e) => {
+      e.preventDefault();
+      if (!adminHasRight('canManagePermissions') && !adminHasRight('canManageAdmins')) return showNotification('Permission denied.', 'error');
+      const email = $('#admin-permissions-email') && $('#admin-permissions-email').value.trim();
+      const password = $('#admin-permissions-password') && $('#admin-permissions-password').value.trim();
+      if (!email || !password) return showNotification('Email and password required.', 'error');
+      const branches = Array.from(document.querySelectorAll('#admin-perm-branches input[type="checkbox"]:checked')).map(c => c.value);
+      const rightsInputs = Array.from(document.querySelectorAll('#admin-perm-rights input[type="checkbox"]'));
+      const rights = rightsInputs.reduce((acc, el) => { acc[el.value] = el.checked; return acc; }, {});
+      setButtonLoading(modalSaveBtn, true, 'Saving...');
+      try {
+        const res = await postData('updateAdmin', { email, password, allowedBranches: branches, rights });
+        showNotification(res.message || 'Admin updated.', res.status === 'success' ? 'success' : 'error');
+        if (res.status === 'success') closeModal($('#admin-permissions-modal'));
+      } catch (e) { handleError(e, 'Failed to save admin'); }
+      finally { setButtonLoading(modalSaveBtn, false); }
     };
   }
   if ($('#admin-logout-btn')) $('#admin-logout-btn').onclick = () => {
@@ -252,63 +657,7 @@ function setupAllEventListeners() {
     showNotification('Logged out','info');
   };
 
-  // Assign New Admin -- handler implementation
-  if ($('#assign-admin-btn')) {
-    $('#assign-admin-btn').onclick = () => {
-      const email = $('#new-admin-email').value.trim();
-      const password = $('#new-admin-password').value.trim();
-      if (!email || !password) {
-        showNotification('Email and password required.', 'error');
-        return;
-      }
-      // Prepare permission UI: list all branches (checkboxes)
-      const branchListDiv = $('#branch-permissions-list');
-      branchListDiv.innerHTML = '';
-      (allData || []).forEach(branch => {
-        const id = 'perm-' + branch.branchName.replace(/\s/g, '-');
-        const label = document.createElement('label');
-        label.className = 'inline-flex items-center gap-2';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.value = branch.branchName;
-        cb.id = id;
-        label.appendChild(cb);
-        label.appendChild(document.createTextNode(' ' + branch.branchName));
-        branchListDiv.appendChild(label);
-      });
-      $('#assign-permissions-section').classList.remove('hidden');
-      // Save clicked email/password in window scope for saving after perms
-      window._pending_admin = { email, password };
-    };
-  }
-  if ($('#save-permissions-btn')) {
-    $('#save-permissions-btn').onclick = () => {
-      if (!window._pending_admin) return;
-      const { email, password } = window._pending_admin;
-      // Collect selected branches
-      const permChecks = Array.from($('#branch-permissions-list').querySelectorAll('input[type=checkbox]'));
-      const allowedBranches = permChecks.filter(cb => cb.checked).map(cb => cb.value);
-      if (allowedBranches.length === 0) {
-        showNotification('Select at least one branch.', 'error');
-        return;
-      }
-      showLoader();
-      postData('assignAdmin', {
-        email, password, allowedBranches: JSON.stringify(allowedBranches),
-        canAssignAdmin: false // cannot grant new admins assign rights
-      })
-        .then(response => {
-          showNotification(response.message, response.status === 'success' ? 'success' : 'error');
-          // Hide perm section and clear fields
-          $('#assign-permissions-section').classList.add('hidden');
-          $('#new-admin-email').value = '';
-          $('#new-admin-password').value = '';
-          window._pending_admin = null;
-        })
-        .catch(e => handleError(e, 'Error assigning admin'))
-        .finally(hideLoader);
-    };
-  }
+  // Assign New Admin handlers are defined later to open unified permissions modal
   setupLoginForm();
   setupPasswordForm();
   setupStaffPhotoUpload();
@@ -341,49 +690,21 @@ function setupAllEventListeners() {
     $(tabIds[2].panel)?.classList.add('hidden');
   }
 
-  // All Assigned Users - fetch and show in settings modal
+  // All Assigned Users - secured fetch and render
   if ($('#show-all-admins-btn')) {
-    $('#show-all-admins-btn').onclick = function () {
+    $('#show-all-admins-btn').onclick = async function () {
       const out = document.getElementById('all-admins-list');
       out.innerHTML = '<span class="text-gray-400">Loading...</span>';
-      fetch('https://script.google.com/macros/s/AKfycbwpC3yx4TNwq-vEJiO2HeJ54X0TPWiKLZW_yypByCkbz2Cgc5_ABafmrWoZUBZJo2Kp/exec?function=getAllAdmins')
-        .then(r => r.json())
-        .then(json => {
-          if (!json || !json.admins || json.admins.length === 0) {
-            out.innerHTML = '<span class="text-red-500">No assigned admin users found.</span>';
-            return;
-          }
-          let html = '<table class="min-w-full text-left text-xs"><thead><tr><th class="pr-2 font-bold">Email</th><th class="pr-2">Password</th><th class="pr-2">Branches</th><th class="pr-2">Assign Rights</th></tr></thead><tbody>';
-          json.admins.forEach(admin => {
-            html += `<tr>
-              <td class="pr-2">${escapeHtml(admin.email)}</td>
-              <td class="pr-2">${escapeHtml(admin.password)}</td>
-              <td class="pr-2">${Array.isArray(admin.branches) && admin.branches.length > 0 ? admin.branches.map(escapeHtml).join(', ') : '<span class="text-gray-400">None</span>'}</td>
-              <td class="pr-2">${admin.canAssignAdmin ? '<span class="text-green-700">Yes</span>' : '<span class="text-gray-500">No</span>'}</td>
-              <td><button class="btn-primary btn-xs" data-edit-admin="${encodeURIComponent(admin.email)}">Edit</button></td>
-            </tr>`;
-          });
-          html += '</tbody></table>';
-          out.innerHTML = html;
-
-          // Add edit handler(s)
-          out.querySelectorAll('[data-edit-admin]').forEach(btn => {
-            btn.onclick = function () {
-              const email = decodeURIComponent(this.getAttribute('data-edit-admin'));
-              const admin = json.admins.find(a => a.email === email);
-              openAdminPermissionsModal({
-                mode: 'edit',
-                email: admin.email,
-                password: admin.password,
-                branches: admin.branches || [],
-                rights: admin.rights || {},
-              });
-            };
-          });
-        })
-        .catch(e => {
-          out.innerHTML = '<span class="text-red-500">Error loading admin users.</span>';
-        });
+      try {
+        const json = await fetchData('getAllAdmins');
+        if (!json || !json.admins || json.admins.length === 0) {
+          out.innerHTML = '<span class="text-red-500">No assigned admin users found.</span>';
+          return;
+        }
+        renderAdminsList(json.admins);
+      } catch (e) {
+        out.innerHTML = '<span class="text-red-500">Error loading admin users.</span>';
+      }
     };
   }
 
@@ -426,15 +747,20 @@ function setupAllEventListeners() {
       label.appendChild(document.createTextNode(' ' + branch.branchName));
       branchDiv.appendChild(label);
     });
-    // Rights
+    // Rights - full schema mirrored from backend getRightsSchema
     const rightsDiv = $('#admin-perm-rights');
     rightsDiv.innerHTML = '';
     const RIGHTS = [
-      { key: 'canAddBranch', label: 'Can add new branch' },
-      { key: 'canSeeAllAdmins', label: 'Can see all assigned admins' },
-      { key: 'canAssignAdmin', label: 'Can assign new admins' },
-      { key: 'canChangeCredentials', label: 'Can change own credentials' },
-    ]; // Extendable
+      { key: 'canAddBranch', label: 'Can add branch' },
+      { key: 'canDeleteBranch', label: 'Can delete branch' },
+      { key: 'canRenameBranch', label: 'Can rename branch' },
+      { key: 'canEditStaff', label: 'Can edit staff' },
+      { key: 'canDeleteStaff', label: 'Can delete staff' },
+      { key: 'canMoveStaff', label: 'Can move staff' },
+      { key: 'canUpdatePhotos', label: 'Can update photos' },
+      { key: 'canManagePermissions', label: 'Can manage permissions' },
+      { key: 'canManageAdmins', label: 'Can manage admins' },
+    ];
     RIGHTS.forEach(r => {
       const id = 'perm-right-' + r.key;
       const cb = document.createElement('input');
@@ -457,6 +783,16 @@ function setupAllEventListeners() {
     }
     m.classList.remove('hidden');
     $('#modal-backdrop').classList.remove('hidden');
+    // Ensure an inline status area exists for feedback
+    let statusArea = m.querySelector('.admin-perm-status');
+    if (!statusArea) {
+      statusArea = document.createElement('div');
+      statusArea.className = 'admin-perm-status text-sm mb-3';
+      m.querySelector('form')?.prepend(statusArea);
+    }
+    statusArea.textContent = '';
+    statusArea.style.color = '#4b5563';
+
     // Save handler (one at a time)
     const form = $('#admin-permissions-form');
     form.onsubmit = ev => {
@@ -467,6 +803,8 @@ function setupAllEventListeners() {
       const rightsObj = {};
       rightsDiv.querySelectorAll('input[type=checkbox]').forEach(cb=>{ rightsObj[cb.value]=cb.checked; });
       if (!email || !password || branchList.length===0) {
+        statusArea.textContent = 'Email, password and at least one branch are required.';
+        statusArea.style.color = '#dc2626';
         showNotification('Email, password and at least one branch required.','error');
         return;
       }
@@ -482,10 +820,15 @@ function setupAllEventListeners() {
         .then(resp => {
           showNotification(resp.message, resp.status==='success'?'success':'error');
           if (resp.status==='success') {
+            statusArea.textContent = 'Saved successfully';
+            statusArea.style.color = '#16a34a';
             closeModal(m);
             $('#modal-backdrop').classList.add('hidden');
             // Optionally reload admin user list
             if ($('#show-all-admins-btn')) $('#show-all-admins-btn').click();
+          } else {
+            statusArea.textContent = resp.message || 'Failed to save admin';
+            statusArea.style.color = '#dc2626';
           }
         })
         .catch(e=>handleError(e, 'Failed to save admin'))
@@ -651,12 +994,19 @@ function setupStaffForm() {
       let originalStaff = GLOBAL_STATE.staffOriginal;
       function extractDriveFileId(photoUrl) {
         if (!photoUrl) return '';
+        // ?id=FILEID
         let match = photoUrl.match(/[?&]id=([\w-]+)/);
         if (match) return match[1];
+        // /file/d/FILEID
         match = photoUrl.match(/\/file\/d\/([\w-]+)/);
         if (match) return match[1];
+        // /uc?...id=FILEID
         match = photoUrl.match(/\/uc\?.*id=([\w-]+)/);
         if (match) return match[1];
+        // lh3.googleusercontent.com/d/FILEID
+        match = photoUrl.match(/googleusercontent\.com\/d\/([\w-]+)/);
+        if (match) return match[1];
+        // Plain file id
         if (/^[\w-]{20,}$/.test(photoUrl)) return photoUrl;
         return '';
       }
@@ -917,12 +1267,20 @@ function createBranchSection(branch) {
   const section = document.createElement('section');
   section.className = 'mb-12';
   section.dataset.branchName = branch.branchName;
-  const adminButtons = isAdmin ?
-    `<div class="space-x-2">
-      <button class="add-staff-btn text-sm py-2 px-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700" data-branch="${branch.branchName}"><i class="fas fa-user-plus mr-1"></i> Add Staff</button>
-      <button class="rename-branch-btn text-sm py-2 px-3 bg-blue-600 text-white rounded-md hover:bg-blue-700" data-branch="${branch.branchName}"><i class="fas fa-edit mr-1"></i> Rename Branch</button>
-      <button class="delete-branch-btn text-sm py-2 px-3 bg-red-600 text-white rounded-md hover:bg-red-700" data-branch="${branch.branchName}"><i class="fas fa-trash-alt"></i> Delete Branch</button>
-    </div>` : '';
+  // Gate admin branch actions by rights + branch access
+  let adminButtons = '';
+  if (isAdmin) {
+    const canAddStaff = adminHasRight('canEditStaff') && adminHasBranch(branch.branchName);
+    const canRenameBranch = adminHasRight('canRenameBranch') && adminHasBranch(branch.branchName);
+    const canDeleteBranch = adminHasRight('canDeleteBranch') && adminHasBranch(branch.branchName);
+    const parts = [];
+    if (canAddStaff) parts.push(`<button class="add-staff-btn text-sm py-2 px-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700" data-branch="${branch.branchName}"><i class="fas fa-user-plus mr-1"></i> Add Staff</button>`);
+    if (canRenameBranch) parts.push(`<button class="rename-branch-btn text-sm py-2 px-3 bg-blue-600 text-white rounded-md hover:bg-blue-700" data-branch="${branch.branchName}"><i class="fas fa-edit mr-1"></i> Rename Branch</button>`);
+    if (canDeleteBranch) parts.push(`<button class="delete-branch-btn text-sm py-2 px-3 bg-red-600 text-white rounded-md hover:bg-red-700" data-branch="${branch.branchName}"><i class="fas fa-trash-alt"></i> Delete Branch</button>`);
+    if (parts.length) {
+      adminButtons = `<div class="space-x-2">${parts.join(' ')}</div>`;
+    }
+  }
   section.innerHTML = `<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 pb-2 border-b-2 border-indigo-500">
     <div><h2 class="text-2xl font-bold text-gray-800">${escapeHtml(branch.branchName)} Staff</h2></div>
     ${adminButtons}
@@ -934,21 +1292,36 @@ function createBranchSection(branch) {
   }
   section.querySelector('.search-box').addEventListener('keyup', handleSearch);
   // Attach button events (delegated where feasible)
-  section.onclick = function (e) {
+  section.onclick = async function (e) {
     if (e.target.closest('.delete-branch-btn')) {
-      const branchName = e.target.closest('.delete-branch-btn').dataset.branch;
-      if (confirm(`Are you sure you want to permanently delete the "${branchName}" branch? This cannot be undone.`)) {
-        showLoader();
-        postData('deleteBranch', { branchName })
-          .then(response => { showNotification(response.message, 'success'); loadInitialData(); })
-          .catch(e => handleError(e, 'Error deleting branch'))
-          .finally(hideLoader);
+      const deleteBtn = e.target.closest('.delete-branch-btn');
+      const branchName = deleteBtn.dataset.branch;
+      if (!adminHasRight('canDeleteBranch') || !adminHasBranch(branchName)) {
+        showNotification('Permission denied: Delete Branch', 'error');
+        return;
       }
+      const ok = await showConfirmModal({ title: 'Delete Branch', message: `Are you sure you want to permanently delete the "${branchName}" branch? This cannot be undone.`, confirmText: 'Delete', cancelText: 'Cancel' });
+      if (!ok) return;
+      showLoader();
+      setButtonLoading(deleteBtn, true, '<i class="fas fa-trash-alt mr-1"></i> Deleting...');
+      postData('deleteBranch', { branchName })
+        .then(response => { showNotification(response.message, 'success'); loadInitialData(); })
+        .catch(e => handleError(e, 'Error deleting branch'))
+        .finally(() => { hideLoader(); setButtonLoading(deleteBtn, false); });
     } else if (e.target.closest('.add-staff-btn')) {
       const branchName = e.target.closest('.add-staff-btn').dataset.branch;
+      if (!adminHasRight('canEditStaff') || !adminHasBranch(branchName)) {
+        showNotification('Permission denied: Add Staff', 'error');
+        return;
+      }
       openStaffModal(null, branchName);
     } else if (e.target.closest('.rename-branch-btn')) {
-      const branchName = e.target.closest('.rename-branch-btn').dataset.branch;
+      const renameBtn = e.target.closest('.rename-branch-btn');
+      const branchName = renameBtn.dataset.branch;
+      if (!adminHasRight('canRenameBranch') || !adminHasBranch(branchName)) {
+        showNotification('Permission denied: Rename Branch', 'error');
+        return;
+      }
       openPromptModal({
         title: "Rename Branch",
         message: `Enter a new name for branch "${branchName}":`,
@@ -956,10 +1329,11 @@ function createBranchSection(branch) {
         callback: (newName) => {
           if (!newName) { showNotification('Branch name cannot be empty.', 'error'); return; }
           showLoader();
+          setButtonLoading(renameBtn, true, '<i class="fas fa-edit mr-1"></i> Renaming...');
           postData('renameBranch', { oldName: branchName, newName })
             .then(response => { showNotification(response.message, 'success'); loadInitialData(); })
             .catch(e => handleError(e, 'Error renaming branch'))
-            .finally(hideLoader);
+            .finally(() => { hideLoader(); setButtonLoading(renameBtn, false); });
         }
       });
     }
@@ -985,6 +1359,8 @@ function createStaffGrid(title, staffList, branchName) {
 function createStaffCard(staff, branchName) {
   const card = document.createElement('div');
   card.className = 'staff-card fade-in cursor-pointer';
+  // Add AOS animation hook for scroll-in
+  try { card.setAttribute('data-aos', 'fade-up'); card.setAttribute('data-aos-offset', '50'); } catch (e) {}
   card.dataset.name = escapeHtml(staff['Full Name'] || '');
   card.dataset.designation = escapeHtml(staff['Designation'] || '');
 
@@ -992,15 +1368,21 @@ function createStaffCard(staff, branchName) {
   const designation = escapeHtml(staff['Designation'] || 'N/A');
   const mobile = escapeHtml(formatMobile(staff['Mobile']) || 'N/A');
   const currentAddress = escapeHtml(staff['Current Address'] || 'N/A');
-  const adminCardButtons = isAdmin ?
-    `<div class="absolute top-2 right-2 flex space-x-2">
-      <button class="edit-staff-btn text-blue-500 hover:text-blue-700 bg-white rounded-full h-8 w-8 flex items-center justify-center shadow-md"><i class="fas fa-pencil-alt"></i></button>
-      <button class="delete-staff-btn text-red-500 hover:text-red-700 bg-white rounded-full h-8 w-8 flex items-center justify-center shadow-md"><i class="fas fa-trash-alt"></i></button>
-    </div>` : '';
+  let adminCardButtons = '';
+  if (isAdmin) {
+    const canEdit = adminHasRight('canEditStaff') && adminHasBranch(branchName);
+    const canDelete = adminHasRight('canDeleteStaff') && adminHasBranch(branchName);
+    const btns = [];
+    if (canEdit) btns.push(`<button class="edit-staff-btn text-blue-500 hover:text-blue-700 bg-white rounded-full h-8 w-8 flex items-center justify-center shadow-md" title="Edit"><i class="fas fa-pencil-alt"></i></button>`);
+    if (canDelete) btns.push(`<button class="delete-staff-btn text-red-500 hover:text-red-700 bg-white rounded-full h-8 w-8 flex items-center justify-center shadow-md" title="Delete"><i class="fas fa-trash-alt"></i></button>`);
+    if (btns.length) adminCardButtons = `<div class="absolute top-2 right-2 flex space-x-2">${btns.join('')}</div>`;
+  }
   // Use direct Photo URL as-is if present, else fallback
   let photoUrl = staff['Photo URL'] && staff['Photo URL'].trim() !== "" ? staff['Photo URL'].trim() : FALLBACK_THUMBNAIL;
   card.innerHTML = `
-    <img src="${photoUrl}" alt="Photo of ${fullName}" class="staff-photo" onerror="this.onerror=null;this.src='${FALLBACK_THUMBNAIL}';">
+    <div class="skeleton skeleton-avatar" aria-hidden="true">
+      <img src="${photoUrl}" alt="Photo of ${fullName}" class="staff-photo" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="opacity:0;" onerror="this.onerror=null;this.src='${FALLBACK_THUMBNAIL}';">
+    </div>
     <div class="staff-name">${fullName}</div>
     <div class="staff-designation">${designation}</div>
     <div class="staff-info">
@@ -1009,21 +1391,53 @@ function createStaffCard(staff, branchName) {
     </div>
     ${adminCardButtons}
   `;
+  // Image load -> replace skeleton wrapper to avoid double border/margins and fade in image
+  const imgEl = card.querySelector('img.staff-photo');
+  const skeletonEl = card.querySelector('.skeleton');
+  if (imgEl) {
+    const reveal = () => {
+      if (skeletonEl && skeletonEl.contains(imgEl)) {
+        // Detach image and replace the skeleton wrapper with the image itself
+        skeletonEl.replaceWith(imgEl);
+      }
+      imgEl.style.opacity = '1';
+      imgEl.classList.add('fade-in');
+    };
+    imgEl.addEventListener('load', reveal, { once: true });
+    if (imgEl.complete) {
+      // For cached images
+      requestAnimationFrame(reveal);
+    }
+  }
   card.onclick = (e) => {
     if (e.target.closest('.edit-staff-btn') || e.target.closest('.delete-staff-btn')) return;
     showStaffDetailsModal(staff, branchName);
   };
   if (isAdmin) {
-    card.querySelector('.edit-staff-btn').onclick = (ev) => {
-      ev.stopPropagation();
-      $$('.modal-container').forEach(m => m.classList.add('hidden'));
-      $('#modal-backdrop').classList.remove('hidden');
-      setTimeout(() => openStaffModal(staff, branchName), 100);
-    };
-    card.querySelector('.delete-staff-btn').onclick = (ev) => {
-      ev.stopPropagation();
-      deleteStaffHandler(staff, branchName);
-    };
+    const editBtn = card.querySelector('.edit-staff-btn');
+    const delBtn = card.querySelector('.delete-staff-btn');
+    if (editBtn) {
+      editBtn.onclick = (ev) => {
+        ev.stopPropagation();
+        if (!adminHasRight('canEditStaff') || !adminHasBranch(branchName)) {
+          showNotification('Permission denied: Edit Staff', 'error');
+          return;
+        }
+        $$('.modal-container').forEach(m => m.classList.add('hidden'));
+        $('#modal-backdrop').classList.remove('hidden');
+        setTimeout(() => openStaffModal(staff, branchName), 100);
+      };
+    }
+    if (delBtn) {
+      delBtn.onclick = (ev) => {
+        ev.stopPropagation();
+        if (!adminHasRight('canDeleteStaff') || !adminHasBranch(branchName)) {
+          showNotification('Permission denied: Delete Staff', 'error');
+          return;
+        }
+        deleteStaffHandler(staff, branchName);
+      };
+    }
   }
   return card;
 }
@@ -1064,6 +1478,21 @@ function updateAdminUI() {
       $('#admin-controls').classList.remove('flex');
     }
   }
+  // Fine-grained gating of admin control buttons
+  const branchBtn = $('#branch-options-button');
+  if (branchBtn) {
+    const canBranchOps = adminHasRight('canAddBranch') || adminHasRight('canDeleteBranch') || adminHasRight('canRenameBranch');
+    branchBtn.classList.toggle('hidden', !isAdmin || !canBranchOps);
+  }
+  const changePwdBtn = $('#change-password-button');
+  if (changePwdBtn) {
+    changePwdBtn.classList.toggle('hidden', !isAdmin || !adminHasRight('canManageAdmins'));
+  }
+  const settingsBtn = $('#admin-settings-btn');
+  if (settingsBtn) {
+    const canManage = adminHasRight('canManageAdmins') || adminHasRight('canManagePermissions');
+    settingsBtn.classList.toggle('hidden', !isAdmin || !canManage);
+  }
 }
 function showStaffDetailsModal(staff, branchName) {
   const modal = $('#staff-details-modal');
@@ -1090,7 +1519,7 @@ function showStaffDetailsModal(staff, branchName) {
   ];
   let html = `
     <div class="flex flex-col items-center mb-6">
-      <img src="${photoUrl}" alt="${escapeHtml(staff['Full Name'] || 'Staff Photo')}" class="w-32 h-32 object-cover rounded-full border-4 border-indigo-200 shadow-md mb-2" onerror="this.onerror=null;this.src='${FALLBACK_THUMBNAIL}';">
+      <img src="${photoUrl}" alt="${escapeHtml(staff['Full Name'] || 'Staff Photo')}" class="w-32 h-32 object-cover rounded-full border-4 border-indigo-200 shadow-md mb-2" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${FALLBACK_THUMBNAIL}';">
       <div class="text-lg font-bold mt-2">${escapeHtml(staff['Full Name'] || '')}</div>
       <div class="text-sm text-gray-500">${escapeHtml(staff['Designation'] || '')}</div>
     </div>
@@ -1119,6 +1548,11 @@ function showStaffDetailsModal(staff, branchName) {
   openModal('staff-details-modal');
 }
 function openStaffModal(staff, branchName) {
+  // Security: verify rights + branch access before allowing edit/add
+  if (!adminHasRight('canEditStaff') || !adminHasBranch(branchName)) {
+    showNotification('Permission denied: Edit Staff', 'error');
+    return;
+  }
   const form = $('#staff-form');
   form.reset();
   GLOBAL_STATE.tempPhotoData = null;
@@ -1144,7 +1578,9 @@ function openStaffModal(staff, branchName) {
       input.value = value;
     });
     $('#rowIndex').value = staff.rowIndex || '';
-    $('#isFormer').checked = false;
+    // Prefill 'Mark as Former Staff' based on branch-specific former section start
+    const formerStart = (branchName === 'Head Office') ? 205 : 52;
+    $('#isFormer').checked = (Number(staff.rowIndex) >= formerStart);
   } else {
     $('#rowIndex').value = '';
     $('#isFormer').checked = false;
@@ -1208,17 +1644,21 @@ function openPromptModal({ title, message, confirmText, callback }) {
   };
   openModal('prompt-modal');
 }
-function deleteStaffHandler(staff, branchName) {
-  if (confirm(`Are you sure you want to delete ${escapeHtml(staff['Full Name'])}?`)) {
-    showLoader();
-    postData('deleteStaff', { branchName, rowIndex: staff.rowIndex })
-      .then(response => {
-        showNotification(response.message, 'success');
-        loadInitialData();
-      })
-      .catch((e) => handleError(e, 'Error deleting staff record'))
-      .finally(hideLoader);
+async function deleteStaffHandler(staff, branchName) {
+  // Pre-check for better UX; backend will enforce regardless
+  if (!adminHasRight('canDeleteStaff') || !adminHasBranch(branchName)) {
+    return showNotification('Permission denied: Delete Staff', 'error');
   }
+  const ok = await showConfirmModal({ title: 'Delete Staff', message: `Are you sure you want to delete ${escapeHtml(staff['Full Name'])}?`, confirmText: 'Delete', cancelText: 'Cancel' });
+  if (!ok) return;
+  showLoader();
+  postData('deleteStaff', { branchName, rowIndex: staff.rowIndex })
+    .then(response => {
+      showNotification(response.message, 'success');
+      loadInitialData();
+    })
+    .catch((e) => handleError(e, 'Error deleting staff record'))
+    .finally(hideLoader);
 }
 //
 // [TODO: For large-scale or growth, consider rewriting UI with a light JS framework (e.g., lit-html or Alpine.js) for far better rendering efficiency, code maintainability and security.]

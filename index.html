@@ -3,9 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Branch Staff Directory</title>
+    <title>Sanvee's Staff Directory</title>
+    <!-- Performance: Preconnect to CDNs -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- AOS Animation Library -->
+    <link rel="stylesheet" href="https://unpkg.com/aos@2.3.4/dist/aos.css">
     <link rel="stylesheet" href="Styles.css">
     <link rel="stylesheet" href="ProfessionalOverrides.css">
     <link rel="icon" type="image/png" href="favicon.png">
@@ -34,7 +39,7 @@
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
                     <i class="fas fa-sitemap text-2xl text-indigo-600"></i>
-                    <h1 class="text-xl font-bold ml-3 text-gray-800">Branch Staff Directory</h1>
+                    <h1 class="text-xl font-bold ml-3 text-gray-800">Sanvee's Staff Directory</h1>
                 </div>
                 <!-- Global Search Bar -->
                 <div class="relative w-72 mx-4">
@@ -349,48 +354,106 @@
         <div id="admin-settings-tabs" class="pt-4">
             <!-- CREDENTIALS TAB -->
             <div class="admin-settings-panel" id="admin-panel-credentials">
-                <div class="bg-white shadow rounded p-4 space-y-5">
-                    <div>
-                        <label class="modal-label mb-1">Change Email</label>
-                        <input type="email" id="admin-edit-email" class="modal-input" autocomplete="username" placeholder="New Email">
+                <div class="admin-form-container">
+                    <div class="admin-section-header">
+                        <h4>
+                            <div class="section-icon">
+                                <i class="fas fa-user-edit"></i>
+                            </div>
+                            Edit My Credentials
+                        </h4>
+                        <div class="section-description">
+                            Update your admin account email and password securely
+                        </div>
                     </div>
-                    <div>
-                        <label class="modal-label mb-1">Change Password</label>
-                        <input type="password" id="admin-edit-password" class="modal-input" autocomplete="new-password" placeholder="New Password">
+                    <div class="admin-form-group">
+                        <label class="admin-form-label">Change Email</label>
+                        <input type="email" id="admin-edit-email" class="admin-form-input" autocomplete="username" placeholder="Enter new email address">
                     </div>
-                    <div class="flex justify-end gap-2">
+                    <div class="admin-form-group">
+                        <label class="admin-form-label">Change Password</label>
+                        <input type="password" id="admin-edit-password" class="admin-form-input" autocomplete="new-password" placeholder="Enter new password">
+                    </div>
+                    <div class="admin-actions">
                         <button type="button" class="btn-primary" id="save-admin-credentials">
-                            Save Changes
+                            <i class="fas fa-save mr-2"></i>Save Changes
                         </button>
                     </div>
                 </div>
             </div>
             <!-- ASSIGN NEW ADMIN TAB -->
             <div class="admin-settings-panel hidden" id="admin-panel-assign">
-                <div class="bg-white shadow rounded p-4 space-y-5">
-                    <div>
-                        <label class="modal-label mb-1">New Admin Email</label>
-                        <input type="email" id="new-admin-email" class="modal-input" placeholder="New Admin Email">
+                <div class="admin-form-container">
+                    <div class="admin-section-header">
+                        <h4>
+                            <div class="section-icon">
+                                <i class="fas fa-user-plus"></i>
+                            </div>
+                            Assign New Admin
+                        </h4>
+                        <div class="section-description">
+                            Create a new admin account and configure access permissions
+                        </div>
                     </div>
-                    <div>
-                        <label class="modal-label mb-1">New Admin Password</label>
-                        <input type="password" id="new-admin-password" class="modal-input" placeholder="New Admin Password">
+                    <div class="admin-form-group">
+                        <label class="admin-form-label">New Admin Email</label>
+                        <input type="email" id="new-admin-email" class="admin-form-input" placeholder="Enter admin email address">
                     </div>
-                    <button type="button" class="btn-primary" id="assign-admin-btn">
-                        Assign Admin
-                    </button>
-                    <div id="assign-permissions-section" class="hidden mt-4">
-                        <label class="modal-label">Assign Branch Permissions</label>
+                    <div class="admin-form-group">
+                        <label class="admin-form-label">New Admin Password</label>
+                        <input type="password" id="new-admin-password" class="admin-form-input" placeholder="Enter secure password">
+                    </div>
+                    <div class="admin-actions">
+                        <button type="button" class="btn-primary" id="assign-admin-btn">
+                            <i class="fas fa-user-shield mr-2"></i>Assign Admin
+                        </button>
+                    </div>
+                    <div id="assign-permissions-section" class="hidden admin-form-container admin-permissions-section-spacing">
+                        <div class="admin-section-header">
+                            <h4>
+                                <div class="section-icon">
+                                    <i class="fas fa-key"></i>
+                                </div>
+                                Branch Permissions
+                            </h4>
+                            <div class="section-description">
+                                Select which branches this admin can access
+                            </div>
+                        </div>
                         <div id="branch-permissions-list" class="space-y-2"></div>
-                        <button type="button" class="btn-primary" id="save-permissions-btn">Save Permissions</button>
+                        <div class="admin-actions">
+                            <button type="button" class="btn-primary" id="save-permissions-btn">
+                                <i class="fas fa-check mr-2"></i>Save Permissions
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
             <!-- ALL ASSIGNED USERS TAB -->
             <div class="admin-settings-panel hidden" id="admin-panel-users">
-                <div class="bg-white shadow rounded p-4">
-                    <button type="button" class="btn-primary mb-3" id="show-all-admins-btn">Show All Assigned Users</button>
-                    <div id="all-admins-list" class="bg-gray-50 p-2 rounded text-sm overflow-x-auto" style="max-height: 250px;"></div>
+                <div class="admin-form-container">
+                    <div class="admin-section-header">
+                        <h4>
+                            <div class="section-icon">
+                                <i class="fas fa-users-cog"></i>
+                            </div>
+                            All Assigned Users
+                        </h4>
+                        <div class="section-description">
+                            View and manage all admin users with their permissions
+                        </div>
+                    </div>
+                    <div class="admin-actions admin-actions-no-border">
+                        <button type="button" class="btn-primary" id="show-all-admins-btn">
+                            <i class="fas fa-eye mr-2"></i>Show All Assigned Users
+                        </button>
+                    </div>
+                    <div class="admin-users-container admin-users-container-spacing">
+                        <div class="admin-users-header">
+                            <i class="fas fa-list mr-2"></i>Admin Users List
+                        </div>
+                        <div id="all-admins-list" class="admin-users-list p-4"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -440,6 +503,7 @@
     <!-- Modals End -->
 </div>
 
+<script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
 <script src="JavaScript.js"></script>
 </body>
 </html>

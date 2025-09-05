@@ -54,12 +54,44 @@ body {
     width: 96px;
     height: 96px;
     object-fit: cover;
+    /* Nudge focal point upward so faces sit visually centered in the circle */
+    object-position: center 35%;
+    display: block; /* prevent baseline gap causing vertical misalignment */
     border-radius: 50%;
     border: 3px solid #e0e7ff;
     box-shadow: 0 2px 8px 0 rgba(99,102,241,0.10);
     margin-bottom: 1rem;
     background: #f3f4f6;
     margin-top: 0.5rem;
+}
+/* Skeleton loader for staff photos and content */
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    background: #e5e7eb;
+}
+.skeleton::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -150px;
+    height: 100%;
+    width: 150px;
+    background: linear-gradient(90deg, rgba(229,231,235,0) 0%, rgba(255,255,255,0.7) 50%, rgba(229,231,235,0) 100%);
+    animation: skeleton-shimmer 1.2s infinite;
+}
+.skeleton-avatar {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    border: 3px solid #e0e7ff;
+    box-shadow: 0 2px 8px 0 rgba(99,102,241,0.10);
+    margin-bottom: 1rem;
+    margin-top: 0.5rem;
+}
+@keyframes skeleton-shimmer {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(200%); }
 }
 .staff-card .staff-name {
     font-size: 1.15rem;
@@ -313,4 +345,20 @@ body {
 }
 #loader.hidden {
   display: none;
+}
+
+/* Accessibility: Respect Reduced Motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .fade-in, .fade-out, .scale-up {
+    animation: none !important;
+  }
+  .staff-card { transition: none !important; }
+  .staff-card:hover { transform: none !important; }
+  .skeleton::after { animation: none !important; }
 }

@@ -6,8 +6,7 @@ The unique aspect of this project is its architecture: it leverages a Google She
 
 ## 🚀 Live Demo
 
-You can view a live demo of this application [here](https://sanveesemployees.github.io
-).
+You can view a live demo of this application [here](https://YOUR_GITHUB_USERNAME.github.io/YOUR_REPO_NAME/).
 
 ## 💻 Architecture Overview
 
