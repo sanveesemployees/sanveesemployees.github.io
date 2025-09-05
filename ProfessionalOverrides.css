@@ -78,12 +78,63 @@
 }
 
 /* Inputs: hover and focus refinement */
-.modal-input:hover {
-    border-color: #c7d2fe;
+/* Enhanced Input Styles with Layered Design */
+.modal-input {
+    background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.9) 100%);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1.5px solid rgba(224,231,255,0.5);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    color: #1f2937;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(99,102,241,0.05), inset 0 1px 2px rgba(0,0,0,0.05);
+    position: relative;
 }
+
+.modal-input::placeholder {
+    color: #9ca3af;
+    font-weight: 400;
+}
+
+.modal-input:hover {
+    border-color: rgba(196,181,253,0.7);
+    background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%);
+    box-shadow: 0 4px 12px rgba(99,102,241,0.08), inset 0 1px 2px rgba(0,0,0,0.05);
+    transform: translateY(-1px);
+}
+
 .modal-input:focus, .modal-input:focus-visible {
     border-color: #6366f1;
-    box-shadow: 0 0 0 3px rgba(99,102,241,0.25);
+    background: linear-gradient(135deg, rgba(255,255,255,1) 0%, rgba(248,250,252,1) 100%);
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.15), 0 6px 16px rgba(99,102,241,0.1);
+    outline: none;
+    transform: translateY(-2px);
+}
+
+/* Input Focus Wave Effect */
+.modal-input:focus::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #06b6d4 100%);
+    border-radius: 0 0 0.75rem 0.75rem;
+    animation: inputWave 0.6s ease-out;
+}
+
+@keyframes inputWave {
+    from {
+        transform: scaleX(0);
+        opacity: 0;
+    }
+    to {
+        transform: scaleX(1);
+        opacity: 1;
+    }
 }
 
 /* Modal close icon/button subtle hover */
@@ -129,18 +180,69 @@
 }
 
 .modal-content {
-    background: linear-gradient(120deg, #f8fafc 0%, #e0e7ff 100%);
-    border-radius: 0.75rem;
-    box-shadow: 0 16px 32px -8px rgba(99,102,241,0.10), 0 4px 16px -2px rgba(0,0,0,0.07);
+    background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 50%, rgba(224,231,255,0.95) 100%);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border-radius: 1rem;
+    box-shadow: 0 24px 48px -12px rgba(99,102,241,0.15), 0 8px 32px -4px rgba(0,0,0,0.1);
     width: 100%;
     max-width: 44rem;
     min-width: 320px;
     max-height: 90vh;
     overflow-y: auto;
     transform: none;
-    transition: box-shadow 0.3s, background 0.3s;
-    border: 1.5px solid #e0e7ff;
-    animation: fadeInUp 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+    transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+    border: 2px solid rgba(224,231,255,0.4);
+    animation: modalSlideIn 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+    position: relative;
+    /* Allow vertical scrolling inside long forms */
+    overflow-x: hidden; /* keep horizontal overflow hidden to preserve rounded corners */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Make the main content region inside modals scrollable while header/footer stay visible */
+.modal-content > form {
+    flex: 1 1 auto;
+    overflow-y: auto;
+}
+.modal-content > .p-6 {
+    flex: 1 1 auto;
+    overflow-y: auto;
+}
+
+/* Modal Wave Background Layer */
+.modal-content::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 800 600' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='modalWave1' x1='0%25' y1='0%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff' opacity='0.4'/%3E%3Cstop offset='50%25' stop-color='%23e0e7ff' opacity='0.5'/%3E%3Cstop offset='100%25' stop-color='%23ffffff' opacity='0.4'/%3E%3C/linearGradient%3E%3ClinearGradient id='modalWave2' x1='0%25' y1='0%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' stop-color='%23ddd6fe' opacity='0.3'/%3E%3Cstop offset='50%25' stop-color='%23c4b5fd' opacity='0.4'/%3E%3Cstop offset='100%25' stop-color='%23ddd6fe' opacity='0.3'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0,400 C100,350 200,450 300,400 C400,350 500,450 600,400 C700,350 750,450 800,400 L800,600 L0,600 Z' fill='url(%23modalWave1)'/%3E%3Cpath d='M0,480 C120,430 240,530 360,480 C480,430 600,530 720,480 C760,460 780,480 800,470 L800,600 L0,600 Z' fill='url(%23modalWave2)'/%3E%3C/svg%3E");
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center bottom;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 1rem;
+}
+
+/* Modal Hover Effect */
+.modal-content:hover {
+    box-shadow: 0 32px 64px -16px rgba(99,102,241,0.2), 0 12px 40px -8px rgba(0,0,0,0.12);
+    transform: translateY(-2px);
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(60px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 /* Admin Settings Modal Enhanced Styling */
@@ -257,15 +359,40 @@
     font-weight: 500;
 }
 
-/* Enhanced Form Containers */
+/* Enhanced Form Containers with Layered Design */
 .admin-form-container {
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    border-radius: 0.75rem;
+    background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.9) 100%);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border-radius: 1rem;
     padding: 1.5rem;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(226,232,240,0.6);
+    box-shadow: 0 8px 32px -8px rgba(99,102,241,0.1), 0 4px 16px -4px rgba(0, 0, 0, 0.05);
     position: relative;
     overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Form Container Wave Background */
+.admin-form-container::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='formWave' x1='0%25' y1='0%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' stop-color='%23e0e7ff' opacity='0.3'/%3E%3Cstop offset='50%25' stop-color='%23c4b5fd' opacity='0.4'/%3E%3Cstop offset='100%25' stop-color='%23e0e7ff' opacity='0.3'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0,30 C50,20 100,40 150,30 C200,20 250,40 300,30 C350,20 375,40 400,30 L400,60 L0,60 Z' fill='url(%23formWave)'/%3E%3C/svg%3E");
+    background-size: cover;
+    background-repeat: no-repeat;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 0 0 1rem 1rem;
+}
+
+/* Form Container Hover Effect */
+.admin-form-container:hover {
+    box-shadow: 0 12px 40px -12px rgba(99,102,241,0.15), 0 6px 20px -6px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
 }
 
 .admin-form-container::before {
@@ -323,12 +450,39 @@
     border-top: 1px solid #e2e8f0;
 }
 
-/* Users List Styling */
+/* Enhanced Users List Styling with Layered Design */
 .admin-users-container {
-    background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
-    border-radius: 0.75rem;
-    border: 1px solid #e2e8f0;
+    background: linear-gradient(135deg, rgba(248,250,252,0.9) 0%, rgba(255,255,255,0.9) 100%);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border-radius: 1rem;
+    border: 1px solid rgba(226,232,240,0.6);
     overflow: hidden;
+    box-shadow: 0 8px 32px -8px rgba(99,102,241,0.1);
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Users Container Wave Background */
+.admin-users-container::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 300 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='usersWave' x1='0%25' y1='0%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' stop-color='%236366f1' opacity='0.1'/%3E%3Cstop offset='50%25' stop-color='%238b5cf6' opacity='0.15'/%3E%3Cstop offset='100%25' stop-color='%236366f1' opacity='0.1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0,20 C40,15 80,25 120,20 C160,15 200,25 240,20 C270,17 285,25 300,20 L300,40 L0,40 Z' fill='url(%23usersWave)'/%3E%3C/svg%3E");
+    background-size: cover;
+    background-repeat: no-repeat;
+    z-index: 0;
+    pointer-events: none;
+    border-radius: 0 0 1rem 1rem;
+}
+
+/* Users Container Hover Effect */
+.admin-users-container:hover {
+    box-shadow: 0 12px 40px -12px rgba(99,102,241,0.15);
+    transform: translateY(-1px);
 }
 
 .admin-users-header {

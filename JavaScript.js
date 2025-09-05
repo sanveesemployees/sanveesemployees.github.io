@@ -573,6 +573,11 @@ document.addEventListener("DOMContentLoaded", () => {
   } catch (e) { /* no-op */ }
   loadInitialData();
   setupAllEventListeners();
+  
+  // Initialize enhanced card interactions after data loads
+  setTimeout(() => {
+    addCardInteractionEffects();
+  }, 1000);
 });
 
 function setupAllEventListeners() {
@@ -1359,92 +1364,453 @@ function createStaffGrid(title, staffList, branchName) {
 function createStaffCard(staff, branchName) {
   const card = document.createElement('div');
   card.className = 'staff-card fade-in cursor-pointer';
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('role', 'button');
+  card.setAttribute('aria-label', `View details for ${staff['Full Name'] || 'staff member'}`);
   // Add AOS animation hook for scroll-in
   try { card.setAttribute('data-aos', 'fade-up'); card.setAttribute('data-aos-offset', '50'); } catch (e) {}
   card.dataset.name = escapeHtml(staff['Full Name'] || '');
   card.dataset.designation = escapeHtml(staff['Designation'] || '');
+  card.dataset.mobile = escapeHtml(formatMobile(staff['Mobile']) || '');
 
   const fullName = escapeHtml(staff['Full Name'] || 'N/A');
   const designation = escapeHtml(staff['Designation'] || 'N/A');
   const mobile = escapeHtml(formatMobile(staff['Mobile']) || 'N/A');
   const currentAddress = escapeHtml(staff['Current Address'] || 'N/A');
-  let adminCardButtons = '';
+  
+  // Determine staff status
+  const isFormer = staff['isFormer'] || false;
+  const statusClass = isFormer ? 'former' : 'active';
+  
+  // Get random gradient class for professional variety
+  const gradientIndex = Math.floor(Math.random() * 6) + 1;
+  const gradientClass = `staff-gradient-${gradientIndex}`;
+  
+  // Create layered card structure
+  const backgroundLayer = document.createElement('div');
+  backgroundLayer.className = `card-layer card-background ${gradientClass}`;
+  
+  // Add multi-layered wave SVG background matching reference design
+  const uniqueId = `${gradientIndex}-${Date.now()}`;
+  backgroundLayer.innerHTML = `
+    <svg class="wave-svg" viewBox="0 0 280 400" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="purpleGradient-${uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="25%" stop-color="#faf8ff"/>
+          <stop offset="50%" stop-color="#f3f0ff"/>
+          <stop offset="75%" stop-color="#e9e3ff"/>
+          <stop offset="100%" stop-color="#ddd4ff"/>
+        </linearGradient>
+        <linearGradient id="waveGradient1-${uniqueId}" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#ddd6fe"/>
+          <stop offset="50%" stop-color="#e4d4fd"/>
+          <stop offset="100%" stop-color="#ddd6fe"/>
+        </linearGradient>
+        <linearGradient id="waveGradient2-${uniqueId}" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#c4b5fd"/>
+          <stop offset="50%" stop-color="#ddd6fe"/>
+          <stop offset="100%" stop-color="#c4b5fd"/>
+        </linearGradient>
+        <linearGradient id="waveGradient3-${uniqueId}" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#a78bfa"/>
+          <stop offset="50%" stop-color="#c4b5fd"/>
+          <stop offset="100%" stop-color="#a78bfa"/>
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#purpleGradient-${uniqueId})"/>
+      <path d="M0,220 C28,210 56,230 84,220 C112,210 140,230 168,220 C196,210 224,230 252,220 C270,215 275,220 280,215 L280,400 L0,400 Z" fill="url(#waveGradient1-${uniqueId})" opacity="0.7"/>
+      <path d="M0,260 C37,250 75,270 112,260 C149,250 187,270 224,260 C261,250 270,260 280,255 L280,400 L0,400 Z" fill="url(#waveGradient2-${uniqueId})" opacity="0.8"/>
+      <path d="M0,300 C47,290 93,310 140,300 C187,290 233,310 280,300 L280,400 L0,400 Z" fill="url(#waveGradient3-${uniqueId})" opacity="0.9"/>
+    </svg>
+  `;
+  
+  // Create frame layer with SVG
+  const frameLayer = document.createElement('div');
+  frameLayer.className = 'card-layer card-frame';
+  frameLayer.innerHTML = `
+    <svg width="100%" height="100%" viewBox="0 0 280 400" xmlns="http://www.w3.org/2000/svg">
+      <path class="frame-path" d="M15,15 L265,15 L265,385 L15,385 Z" />
+    </svg>
+  `;
+  
+  // Create content layer
+  const contentLayer = document.createElement('div');
+  contentLayer.className = 'card-layer card-content';
+  
+  // Fragment heading with photo
+  const fragmentHeading = document.createElement('div');
+  fragmentHeading.className = 'content-fragment fragment-heading';
+  
+  const photoContainer = document.createElement('div');
+  photoContainer.className = 'staff-photo-container';
+  
+  const photo = document.createElement('img');
+  photo.className = 'staff-photo skeleton';
+  photo.alt = `Photo of ${fullName}`;
+  photo.loading = 'lazy';
+  photo.decoding = 'async';
+  photo.referrerPolicy = 'no-referrer';
+  
+  // Use direct Photo URL as-is if present, else fallback
+  let photoUrl = staff['Photo URL'] && staff['Photo URL'].trim() !== "" ? staff['Photo URL'].trim() : FALLBACK_THUMBNAIL;
+  photo.src = photoUrl;
+  photo.onerror = () => {
+    photo.onerror = null;
+    photo.src = FALLBACK_THUMBNAIL;
+  };
+  
+  photoContainer.appendChild(photo);
+  fragmentHeading.appendChild(photoContainer);
+  
+  // Staff name and designation
+  const name = document.createElement('h3');
+  name.className = 'staff-name';
+  name.textContent = fullName;
+  
+  const designationEl = document.createElement('p');
+  designationEl.className = 'staff-designation';
+  designationEl.textContent = designation;
+  
+  fragmentHeading.appendChild(name);
+  fragmentHeading.appendChild(designationEl);
+  
+  // Meta information
+  const fragmentMeta = document.createElement('div');
+  fragmentMeta.className = 'fragment-meta';
+  fragmentMeta.innerHTML = `
+    <div class="meta-line"></div>
+    <span class="meta-text">STAFF</span>
+    <div class="meta-line"></div>
+  `;
+  
+  // Quick action buttons - positioned after STAFF meta and before contact info
+  const quickActions = document.createElement('div');
+  quickActions.className = 'quick-actions-compact';
+  
+  const callBtn = document.createElement('button');
+  callBtn.className = 'quick-action-btn-compact';
+  callBtn.innerHTML = '<i class="fas fa-phone"></i><span>Call</span>';
+  callBtn.title = `Call ${fullName}`;
+  callBtn.setAttribute('aria-label', `Call ${mobile}`);
+  callBtn.setAttribute('data-action', 'call');
+  quickActions.appendChild(callBtn);
+  
+  const messageBtn = document.createElement('button');
+  messageBtn.className = 'quick-action-btn-compact';
+  messageBtn.innerHTML = '<i class="fas fa-sms"></i><span>SMS</span>';
+  messageBtn.title = 'Send Message';
+  messageBtn.setAttribute('aria-label', `Send message to ${fullName}`);
+  messageBtn.setAttribute('data-action', 'message');
+  quickActions.appendChild(messageBtn);
+  
+  const detailsBtn = document.createElement('button');
+  detailsBtn.className = 'quick-action-btn-compact';
+  detailsBtn.innerHTML = '<i class="fas fa-info-circle"></i><span>Details</span>';
+  detailsBtn.title = 'View Details';
+  detailsBtn.setAttribute('aria-label', `View full details for ${fullName}`);
+  detailsBtn.setAttribute('data-action', 'details');
+  quickActions.appendChild(detailsBtn);
+
+  // Fragment body with enhanced staff info
+  const fragmentBody = document.createElement('div');
+  fragmentBody.className = 'content-fragment fragment-body';
+  
+  const staffInfo = document.createElement('div');
+  staffInfo.className = 'staff-info-enhanced';
+  
+  if (mobile && mobile !== 'N/A') {
+    const mobileEl = document.createElement('div');
+    mobileEl.className = 'info-item-enhanced';
+    mobileEl.innerHTML = `
+      <div class="info-background-layer"></div>
+      <div class="info-content">
+        <i class="fas fa-phone-alt"></i> 
+        <span>${mobile}</span>
+      </div>
+    `;
+    mobileEl.title = `Click to call ${mobile}`;
+    mobileEl.setAttribute('data-action', 'call');
+    staffInfo.appendChild(mobileEl);
+  }
+  
+  if (currentAddress && currentAddress !== 'N/A') {
+    const addressEl = document.createElement('div');
+    addressEl.className = 'info-item-enhanced';
+    addressEl.innerHTML = `
+      <div class="info-background-layer"></div>
+      <div class="info-content">
+        <i class="fas fa-map-marker-alt"></i> 
+        <span>${currentAddress}</span>
+      </div>
+    `;
+    addressEl.title = `Address: ${currentAddress}`;
+    staffInfo.appendChild(addressEl);
+  }
+  
+  fragmentBody.appendChild(staffInfo);
+  
+  // Status indicator
+  const statusIndicator = document.createElement('div');
+  statusIndicator.className = `status-indicator ${statusClass}`;
+  statusIndicator.title = isFormer ? 'Former Staff' : 'Active Staff';
+  
+  // Enhanced admin controls
+  const adminControls = document.createElement('div');
+  adminControls.className = 'admin-controls';
+  
   if (isAdmin) {
     const canEdit = adminHasRight('canEditStaff') && adminHasBranch(branchName);
     const canDelete = adminHasRight('canDeleteStaff') && adminHasBranch(branchName);
-    const btns = [];
-    if (canEdit) btns.push(`<button class="edit-staff-btn text-blue-500 hover:text-blue-700 bg-white rounded-full h-8 w-8 flex items-center justify-center shadow-md" title="Edit"><i class="fas fa-pencil-alt"></i></button>`);
-    if (canDelete) btns.push(`<button class="delete-staff-btn text-red-500 hover:text-red-700 bg-white rounded-full h-8 w-8 flex items-center justify-center shadow-md" title="Delete"><i class="fas fa-trash-alt"></i></button>`);
-    if (btns.length) adminCardButtons = `<div class="absolute top-2 right-2 flex space-x-2">${btns.join('')}</div>`;
-  }
-  // Use direct Photo URL as-is if present, else fallback
-  let photoUrl = staff['Photo URL'] && staff['Photo URL'].trim() !== "" ? staff['Photo URL'].trim() : FALLBACK_THUMBNAIL;
-  card.innerHTML = `
-    <div class="skeleton skeleton-avatar" aria-hidden="true">
-      <img src="${photoUrl}" alt="Photo of ${fullName}" class="staff-photo" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="opacity:0;" onerror="this.onerror=null;this.src='${FALLBACK_THUMBNAIL}';">
-    </div>
-    <div class="staff-name">${fullName}</div>
-    <div class="staff-designation">${designation}</div>
-    <div class="staff-info">
-      <p><i class="fas fa-phone-alt"></i> ${mobile}</p>
-      <p><i class="fas fa-map-marker-alt"></i> ${currentAddress}</p>
-    </div>
-    ${adminCardButtons}
-  `;
-  // Image load -> replace skeleton wrapper to avoid double border/margins and fade in image
-  const imgEl = card.querySelector('img.staff-photo');
-  const skeletonEl = card.querySelector('.skeleton');
-  if (imgEl) {
-    const reveal = () => {
-      if (skeletonEl && skeletonEl.contains(imgEl)) {
-        // Detach image and replace the skeleton wrapper with the image itself
-        skeletonEl.replaceWith(imgEl);
-      }
-      imgEl.style.opacity = '1';
-      imgEl.classList.add('fade-in');
-    };
-    imgEl.addEventListener('load', reveal, { once: true });
-    if (imgEl.complete) {
-      // For cached images
-      requestAnimationFrame(reveal);
+    
+    if (canEdit) {
+      const editBtn = document.createElement('button');
+      editBtn.className = 'admin-control-btn edit';
+      editBtn.innerHTML = '<i class="fas fa-edit"></i>';
+      editBtn.title = 'Edit Staff';
+      editBtn.setAttribute('aria-label', `Edit ${fullName}`);
+      adminControls.appendChild(editBtn);
+    }
+    
+    if (canDelete) {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'admin-control-btn delete';
+      deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+      deleteBtn.title = 'Delete Staff';
+      deleteBtn.setAttribute('aria-label', `Delete ${fullName}`);
+      adminControls.appendChild(deleteBtn);
     }
   }
-  card.onclick = (e) => {
-    if (e.target.closest('.edit-staff-btn') || e.target.closest('.delete-staff-btn')) return;
+  
+  // Assemble content layer
+  contentLayer.appendChild(fragmentHeading);
+  contentLayer.appendChild(fragmentMeta);
+  contentLayer.appendChild(quickActions);
+  contentLayer.appendChild(fragmentBody);
+  
+  // Assemble the layered card
+  card.appendChild(backgroundLayer);
+  card.appendChild(frameLayer);
+  card.appendChild(contentLayer);
+  card.appendChild(statusIndicator);
+  card.appendChild(adminControls);
+  
+  // Enhanced image loading
+  photo.addEventListener('load', () => {
+    photo.classList.remove('skeleton');
+    photo.style.opacity = '1';
+    photo.classList.add('fade-in');
+  }, { once: true });
+  
+  if (photo.complete) {
+    requestAnimationFrame(() => {
+      photo.classList.remove('skeleton');
+      photo.style.opacity = '1';
+      photo.classList.add('fade-in');
+    });
+  }
+  
+  // Add 3D mouse tracking and parallax effects
+  let isHovering = false;
+  
+  card.addEventListener('mouseenter', () => {
+    isHovering = true;
+  });
+  
+  card.addEventListener('mouseleave', () => {
+    isHovering = false;
+    // Reset transforms on mouse leave
+    backgroundLayer.style.transform = '';
+    frameLayer.style.transform = '';
+    contentLayer.style.transform = '';
+    photoContainer.style.transform = '';
+    card.style.transform = '';
+  });
+  
+  card.addEventListener('mousemove', (e) => {
+    if (!isHovering) return;
+    
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    
+    // Calculate rotation angles (limited range for subtle effect)
+    const rotateX = (y - centerY) / centerY * -8; // Max 8 degrees
+    const rotateY = (x - centerX) / centerX * 8;   // Max 8 degrees
+    
+    // Calculate parallax offsets
+    const moveX = (x - centerX) / centerX * 10; // Max 10px movement
+    const moveY = (y - centerY) / centerY * 10;
+    
+    // Apply 3D transform to main card
+    card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(20px)`;
+    
+    // Apply layered parallax effects
+    backgroundLayer.style.transform = `translateX(${moveX * 0.5}px) translateY(${moveY * 0.5}px) scale(1.02)`;
+    frameLayer.style.transform = `translateX(${moveX * -0.3}px) translateY(${moveY * -0.3}px)`;
+    contentLayer.style.transform = `translateX(${moveX * 0.2}px) translateY(${moveY * 0.2}px)`;
+    photoContainer.style.transform = `translateX(${moveX * -0.4}px) translateY(${moveY * -0.4}px) scale(1.05)`;
+  });
+  // Enhanced event handling with delegation
+  card.addEventListener('click', handleCardClick);
+  card.addEventListener('keydown', handleCardKeydown);
+  
+  function handleCardClick(e) {
+    const action = e.target.closest('[data-action]')?.dataset.action;
+    const adminBtn = e.target.closest('.admin-control-btn');
+    
+    if (adminBtn) {
+      e.stopPropagation();
+      handleAdminAction(adminBtn, staff, branchName);
+      return;
+    }
+    
+    if (action) {
+      e.stopPropagation();
+      handleQuickAction(action, staff, fullName, mobile);
+      return;
+    }
+    
+    // Default card click - show details
     showStaffDetailsModal(staff, branchName);
-  };
-  if (isAdmin) {
-    const editBtn = card.querySelector('.edit-staff-btn');
-    const delBtn = card.querySelector('.delete-staff-btn');
-    if (editBtn) {
-      editBtn.onclick = (ev) => {
-        ev.stopPropagation();
-        if (!adminHasRight('canEditStaff') || !adminHasBranch(branchName)) {
-          showNotification('Permission denied: Edit Staff', 'error');
-          return;
-        }
-        $$('.modal-container').forEach(m => m.classList.add('hidden'));
-        $('#modal-backdrop').classList.remove('hidden');
-        setTimeout(() => openStaffModal(staff, branchName), 100);
-      };
+  }
+  
+  function handleCardKeydown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      showStaffDetailsModal(staff, branchName);
     }
-    if (delBtn) {
-      delBtn.onclick = (ev) => {
-        ev.stopPropagation();
-        if (!adminHasRight('canDeleteStaff') || !adminHasBranch(branchName)) {
-          showNotification('Permission denied: Delete Staff', 'error');
-          return;
+  }
+  
+  function handleAdminAction(btn, staff, branchName) {
+    if (btn.classList.contains('edit')) {
+      if (!adminHasRight('canEditStaff') || !adminHasBranch(branchName)) {
+        showNotification('Permission denied: Edit Staff', 'error');
+        return;
+      }
+      $$('.modal-container').forEach(m => m.classList.add('hidden'));
+      $('#modal-backdrop').classList.remove('hidden');
+      setTimeout(() => openStaffModal(staff, branchName), 100);
+    } else if (btn.classList.contains('delete')) {
+      if (!adminHasRight('canDeleteStaff') || !adminHasBranch(branchName)) {
+        showNotification('Permission denied: Delete Staff', 'error');
+        return;
+      }
+      deleteStaffHandler(staff, branchName);
+    }
+  }
+  
+  function handleQuickAction(action, staff, fullName, mobile) {
+    switch (action) {
+      case 'call':
+        if (mobile && mobile !== 'N/A') {
+          window.location.href = `tel:${mobile}`;
+          showNotification(`Calling ${fullName}...`, 'info', 2000);
+        } else {
+          showNotification('No phone number available', 'error');
         }
-        deleteStaffHandler(staff, branchName);
-      };
+        break;
+      case 'message':
+        if (mobile && mobile !== 'N/A') {
+          window.location.href = `sms:${mobile}`;
+          showNotification(`Opening messages for ${fullName}...`, 'info', 2000);
+        } else {
+          showNotification('No phone number available', 'error');
+        }
+        break;
+      case 'details':
+        showStaffDetailsModal(staff, branchName);
+        break;
     }
   }
   return card;
+}
+
+// Enhanced card interactions and animations
+function addCardInteractionEffects() {
+  // Add stagger animation to cards when they load
+  const cards = document.querySelectorAll('.staff-card');
+  cards.forEach((card, index) => {
+    card.style.animationDelay = `${index * 50}ms`;
+  });
+  
+  // Add intersection observer for scroll animations
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('fade-in');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1 });
+    
+    cards.forEach(card => {
+      if (!card.classList.contains('fade-in')) {
+        observer.observe(card);
+      }
+    });
+  }
+}
+
+// Enhanced search with visual feedback
+function enhancedSearch(searchTerm, container) {
+  const cards = container.querySelectorAll('.staff-card');
+  const normalizedSearch = searchTerm.toLowerCase();
+  let visibleCount = 0;
+  
+  cards.forEach(card => {
+    const name = card.dataset.name.toLowerCase();
+    const designation = card.dataset.designation.toLowerCase();
+    const mobile = card.dataset.mobile.toLowerCase();
+    
+    const matches = name.includes(normalizedSearch) || 
+                   designation.includes(normalizedSearch) || 
+                   mobile.includes(normalizedSearch);
+    
+    if (matches || !searchTerm) {
+      card.style.display = 'flex';
+      card.classList.add('fade-in');
+      visibleCount++;
+    } else {
+      card.style.display = 'none';
+      card.classList.remove('fade-in');
+    }
+  });
+  
+  // Show/hide no results message
+  let noResultsMsg = container.querySelector('.no-results-message');
+  if (visibleCount === 0 && searchTerm) {
+    if (!noResultsMsg) {
+      noResultsMsg = document.createElement('div');
+      noResultsMsg.className = 'no-results-message col-span-full text-center py-8 text-gray-500';
+      noResultsMsg.innerHTML = `
+        <i class="fas fa-search text-4xl mb-4 opacity-50"></i>
+        <p class="text-lg font-medium">No staff found</p>
+        <p class="text-sm">Try adjusting your search terms</p>
+      `;
+      container.appendChild(noResultsMsg);
+    }
+    noResultsMsg.style.display = 'block';
+  } else if (noResultsMsg) {
+    noResultsMsg.style.display = 'none';
+  }
+  
+  return visibleCount;
 }
 function handleSearch(event) {
   const searchTerm = event.target.value.toLowerCase();
   const normalizedSearch = searchTerm.startsWith('0') ? searchTerm : (searchTerm.match(/^\d+$/) ? '0' + searchTerm : searchTerm);
   const branchSection = event.target.closest('section');
+  const cardsContainer = branchSection.querySelector('.grid');
+  
+  if (cardsContainer) {
+    enhancedSearch(searchTerm, cardsContainer);
+  }
+  
+  // Legacy fallback
   const cards = branchSection.querySelectorAll('.staff-card');
   cards.forEach(card => {
     const name = card.dataset.name.toLowerCase();
