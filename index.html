@@ -19,7 +19,7 @@
   <!-- Accessibility: Skip to Main Content -->
   <a href="#main-content" class="skip-link sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 bg-indigo-600 text-white rounded px-4 py-2">Skip to main content</a>
   <!-- Loader: visible while loading, hidden otherwise -->
-  <div id="loader" class="hidden" aria-busy="true" aria-label="Loading..." aria-live="assertive" role="status" style="background:#fff;min-height:60px;min-width:120px;display:flex;align-items:center;justify-content:center;z-index:10000;">
+  <div id="loader" class="hidden loader-style" aria-busy="true" aria-label="Loading..." aria-live="assertive" role="status">
     <div class="loader">
       <div class="inner one"></div>
       <div class="inner two"></div>
@@ -51,6 +51,7 @@
                 </button>
                 <div id="admin-controls" class="hidden items-center space-x-4">
                     <button id="branch-options-button" class="admin-btn bg-indigo-500 hover:bg-indigo-600"><i class="fas fa-sitemap mr-2"></i>Branch Options</button>
+                    <button id="staff-status-button" class="admin-btn bg-purple-600 hover:bg-purple-700"><i class="fas fa-user-clock mr-2"></i>Staff Status</button>
                     <button id="change-password-button" class="admin-btn bg-yellow-500 hover:bg-yellow-600"><i class="fas fa-key mr-2"></i>Change Password</button>
                     <button id="logout-button" class="admin-btn bg-red-500 hover:bg-red-600"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button>
                     <!-- Settings Icon -->
@@ -472,11 +473,11 @@
             <form id="admin-permissions-form">
                 <div class="p-6 flex flex-col gap-5">
                     <div>
-                        <label class="modal-label" for="admin-email">Admin Email</label>
+                        <label class="modal-label" for="admin-permissions-email">Admin Email</label>
                         <input type="email" id="admin-permissions-email" class="modal-input" readonly required>
                     </div>
                     <div>
-                        <label class="modal-label" for="admin-password">Admin Password</label>
+                        <label class="modal-label" for="admin-permissions-password">Admin Password</label>
                         <input type="text" id="admin-permissions-password" class="modal-input" required>
                         <span id="admin-permissions-password-reset" class="block text-right text-xs text-indigo-500 cursor-pointer hidden mt-1">Reset Password</span>
                     </div>
@@ -498,6 +499,17 @@
                     <button type="submit" class="btn-primary" id="admin-permissions-save-btn">Save</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Staff Status Modal (Centered Large) -->
+    <div id="staff-status-modal" class="modal-container hidden" role="dialog" aria-modal="true" aria-labelledby="staff-status-title">
+        <div class="modal-content" style="width:96vw; max-width:1280px; height:85vh; display:flex; flex-direction:column; padding:0; overflow:hidden;">
+            <div class="flex items-center justify-between px-4 py-3 border-b bg-purple-600 text-white" style="flex:0 0 auto;">
+                <h3 id="staff-status-title" class="text-lg font-semibold flex items-center"><i class="fas fa-user-clock mr-2"></i>Staff Status</h3>
+                <button type="button" class="btn-secondary modal-close bg-white text-gray-800 hover:bg-gray-100"><i class="fas fa-times mr-1"></i>Close</button>
+            </div>
+            <div id="staff-status-body" class="p-4 sm:p-6 lg:p-8 bg-white" style="flex:1 1 auto; overflow:auto;"></div>
         </div>
     </div>
     <!-- Modals End -->

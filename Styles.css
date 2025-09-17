@@ -1174,6 +1174,10 @@ opacity: 0.9;
     padding: 2rem 1rem;
     overflow-y: auto;
 }
+/* Modal stacking order overrides: ensure correct z-index when multiple modals are open */
+#staff-status-modal.modal-container { z-index: 120; }
+#staff-details-modal.modal-container { z-index: 140; }
+#staff-modal.modal-container { z-index: 200; }
 .modal-content {
     background-color: #fff;
     border-radius: 0.5rem;

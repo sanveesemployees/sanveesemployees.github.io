@@ -13,7 +13,8 @@ let staffOriginal = null;
 const GLOBAL_STATE = { // encapsulated state for fixes
   tempPhotoData: null,
   currentBranch: '',
-  staffOriginal: null
+  staffOriginal: null,
+  staffStatusState: { activeTab: 'approval', search: '', scrollTop: 0 }
 };
 
 // Utility: String Escaping
@@ -36,6 +37,14 @@ function normalizeMobile(mobile) {
   if (!mobile || String(mobile).trim() === '') return '';
   mobile = String(mobile);
   return mobile.startsWith('0') ? mobile : '0' + mobile;
+}
+// Utility: Debounce to throttle high-frequency events (e.g., input)
+function debounce(fn, delay = 180) {
+  let t;
+  return function(...args) {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(null, args), delay);
+  }
 }
 // Utility: Consistent notification feedback
 function showNotification(message, type = 'info', duration = 3000) {
@@ -533,18 +542,34 @@ async function checkAdminSession() {
 document.addEventListener("DOMContentLoaded", () => {
   // Loader/modal UI boot
   showLoader();
-  checkAdminSession();
+  checkAdminSession().finally(loadInitialData);
 
   // Attach (delegated) event handling for modals and global UI
   document.body.addEventListener('click', function(e) {
     if (e.target.classList.contains('modal-close')) {
-      const modal = e.target.closest('.modal-container');
-      if (modal) closeModal(modal);
+      // Support standard modals and staff status modal
+      const modalContainer = e.target.closest('.modal-container');
+      const staffStatusModal = document.getElementById('staff-status-modal');
+      const backdrop = document.getElementById('modal-backdrop');
+      if (modalContainer) {
+        const isStaffStatus = modalContainer.id === 'staff-status-modal';
+        closeModal(modalContainer);
+        if (isStaffStatus) {
+          // Unlock page scroll when closing staff status modal
+          document.body.style.overflow = '';
+        }
+      } else if (staffStatusModal && !staffStatusModal.classList.contains('hidden')) {
+        staffStatusModal.classList.add('hidden');
+        if (backdrop) backdrop.classList.add('hidden');
+        document.body.style.overflow = '';
+      }
       return;
     }
     if (e.target === $('#modal-backdrop')) {
-      $$('.modal-container').forEach(m => m.classList.add('hidden'));
+      $('.modal-container').forEach(m => m.classList.add('hidden'));
       $('#modal-backdrop').classList.add('hidden');
+      // Ensure page scroll is unlocked when backdrop closes modals
+      document.body.style.overflow = '';
       return;
     }
     if (e.target.closest('.modal-content')) return;
@@ -555,7 +580,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if ($('#modal-backdrop')) $('#modal-backdrop').classList.add('hidden');
 
   // Attach loader UI
-  hideLoader();
+  // Loader is managed inside loadInitialData(); removed early hide to prevent flicker.
   // Initialize AOS if available (added in index.html)
   try {
     if (window.AOS) {
@@ -571,7 +596,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
   } catch (e) { /* no-op */ }
-  loadInitialData();
+  // loadInitialData is invoked after checkAdminSession completes above
   setupAllEventListeners();
   
   // Initialize enhanced card interactions after data loads
@@ -594,6 +619,21 @@ function setupAllEventListeners() {
       setAdminMode(false);
       showNotification('Logged out successfully', 'info');
       loadInitialData();
+    };
+  }
+
+  // Staff Status quick access
+  const staffStatusBtn = $('#staff-status-button');
+  if (staffStatusBtn) {
+    staffStatusBtn.onclick = () => {
+      try {
+        renderStaffStatusModal();
+        openModal('staff-status-modal');
+        // Lock page scroll while status modal is open
+        document.body.style.overflow = 'hidden';
+      } catch (e) {
+        handleError(e, 'Failed to open Staff Status');
+      }
     };
   }
 
@@ -1055,7 +1095,20 @@ function setupStaffForm() {
         .then(response => {
           if (response.status === 'success') {
             showNotification(response.message, 'success');
-            loadInitialData();
+            // Refresh data and keep Staff Status modal if it is open
+            fetchData('getInitialData')
+              .then(res => {
+                if (res.status === 'success') {
+                  allData = res.data;
+                  renderAllBranches();
+                  const statusModal = document.getElementById('staff-status-modal');
+                  if (statusModal && !statusModal.classList.contains('hidden')) {
+                    // Re-render the Staff Status modal content and preserve UI state
+                    renderStaffStatusModal();
+                  }
+                }
+              })
+              .catch(() => { /* ignore */ });
           } else {
             showNotification('Error: ' + response.message, 'error');
           }
@@ -1208,10 +1261,11 @@ function setupGlobalSearch() {
       suggestionsBox.style.display = 'block';
     }
   }
-  globalSearch.addEventListener('input', function () {
-    lastQuery = this.value.trim().toLowerCase();
+  const onGlobalInput = debounce(function (ev) {
+    lastQuery = (ev.target.value || '').trim().toLowerCase();
     doGlobalSearch(lastQuery);
-  });
+  }, 180);
+  globalSearch.addEventListener('input', onGlobalInput);
   suggestionsBox.addEventListener('mousedown', function (e) {
     const item = e.target.closest('[data-branch][data-name]');
     if (item) {
@@ -1256,11 +1310,284 @@ function loadInitialData() {
 }
 
 // === MAIN UI RENDER LOGIC ===
+
+// Date helpers for Staff Status calculations
+function parseDateSafe(input) {
+  if (!input) return null;
+  if (input instanceof Date) return isNaN(input) ? null : input;
+  const s = String(input).trim();
+  if (!s) return null;
+  // Try ISO YYYY-MM-DD first
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+  if (m) {
+    const y = parseInt(m[1], 10), mo = parseInt(m[2], 10) - 1, d = parseInt(m[3], 10);
+    const dt = new Date(y, mo, d);
+    return isNaN(dt) ? null : dt;
+  }
+  // Try DD/MM/YYYY
+  m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+  if (m) {
+    const d = parseInt(m[1], 10), mo = parseInt(m[2], 10) - 1, y = parseInt(m[3], 10);
+    const dt = new Date(y, mo, d);
+    return isNaN(dt) ? null : dt;
+  }
+  // Fallback to Date.parse
+  const dt = new Date(s);
+  return isNaN(dt) ? null : dt;
+}
+function daysInMonth(year, month) { // month: 0-11
+  return new Date(year, month + 1, 0).getDate();
+}
+function diffYMD(fromDate, toDate = new Date()) {
+  if (!fromDate) return { years: 0, months: 0, days: 0, totalMonths: 0, totalDays: 0 };
+  // Normalize times to noon to avoid DST issues
+  const from = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), 12);
+  const to = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 12);
+  let years = to.getFullYear() - from.getFullYear();
+  let months = to.getMonth() - from.getMonth();
+  let days = to.getDate() - from.getDate();
+  if (days < 0) {
+    months -= 1;
+    const pm = (to.getMonth() - 1 + 12) % 12;
+    const py = pm === 11 ? to.getFullYear() - 1 : to.getFullYear();
+    days += daysInMonth(py, pm);
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  const totalDays = Math.floor((to - from) / (1000 * 60 * 60 * 24));
+  return { years, months, days, totalMonths: years * 12 + months, totalDays };
+}
+function formatGapText(diff) {
+  if (!diff) return 'N/A';
+  const parts = [];
+  if (diff.years > 0) parts.push(`${diff.years} ${diff.years === 1 ? 'Year' : 'Years'}`);
+  if (diff.months > 0) parts.push(`${diff.months} ${diff.months === 1 ? 'Month' : 'Months'}`);
+  if (diff.days > 0) parts.push(`${diff.days} ${diff.days === 1 ? 'Day' : 'Days'}`);
+  if (parts.length === 0) return 'Today';
+  if (parts.length === 1) return parts[0];
+  return parts.slice(0, -1).join(', ') + ' and ' + parts.slice(-1);
+}
+function getStaffStatusCategory(staff) {
+  const incStr = (staff['Increment Date'] || '').toString().trim();
+  const joinStr = (staff['Date of Joining'] || '').toString().trim();
+  const incDate = parseDateSafe(incStr);
+  const joinDate = parseDateSafe(joinStr);
+  if (incDate) {
+    const d = diffYMD(incDate);
+    const needsApproval = d.years >= 1 || d.totalDays >= 365;
+    return { category: needsApproval ? 'approval' : 'ongoing', ref: 'increment', diff: d };
+  }
+  if (joinDate) {
+    const d = diffYMD(joinDate);
+    const needsApproval = d.totalMonths >= 6 || d.totalDays >= 182; // approx 6 months
+    return { category: needsApproval ? 'approval' : 'ongoing', ref: 'joining', diff: d };
+  }
+  return { category: 'ongoing', ref: 'none', diff: null };
+}
+function createStaffStatusSection() {
+  const section = document.createElement('section');
+  section.id = 'staff-status-section';
+  section.className = 'mb-12';
+  const header = document.createElement('div');
+  header.className = 'flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 pb-2 border-b-2 border-purple-500';
+  header.innerHTML = `<div><h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-user-clock text-purple-600 mr-2"></i>Staff Status</h2></div>`;
+  section.appendChild(header);
+
+  // Aggregate staff across all branches (current staff only)
+  const approvalList = [];
+  const ongoingList = [];
+  (allData || []).forEach(branch => {
+    (branch.currentStaff || []).forEach(staff => {
+      if (!staff || (staff['Full Name'] || '').toString().trim() === '') return;
+      const status = getStaffStatusCategory(staff);
+      const gapText = status.diff ? formatGapText(status.diff) : 'N/A';
+      const payload = { staff, branchName: branch.branchName, gapText };
+      if (status.category === 'approval') approvalList.push(payload); else ongoingList.push(payload);
+    });
+  });
+
+  function buildGrid(title, list) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `<h3 class="text-xl font-semibold text-gray-700 mt-2 mb-4">${title}</h3>`;
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6';
+    if (list.length === 0) {
+      grid.innerHTML = `<p class="text-gray-500 italic col-span-full">No staff in this section.</p>`;
+    } else {
+      list.forEach(({ staff, branchName, gapText }) => {
+        grid.appendChild(createStaffCard(staff, branchName, { view: 'status', gapText }));
+      });
+    }
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  section.appendChild(buildGrid('Increment Approval', approvalList));
+  section.appendChild(buildGrid('On Going', ongoingList));
+  return section;
+}
+
+// Render improved Staff Status modal with tabs, counts and search
+function renderStaffStatusModal() {
+  const body = document.getElementById('staff-status-body');
+  if (!body) return;
+  // Build UI shell (toolbar + two panels)
+  body.innerHTML = `
+    <div class="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <span id="badge-approval" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+          <i class=\"fas fa-arrow-up-wide-short mr-1\"></i> Approval <span id="staff-status-count-approval" class="ml-1">0</span>
+        </span>
+        <span id="badge-ongoing" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+          <i class=\"fas fa-rotate mr-1\"></i> On Going <span id="staff-status-count-ongoing" class="ml-1">0</span>
+        </span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="inline-flex rounded-md shadow-sm overflow-hidden border border-gray-200">
+          <button id="staff-status-tab-approval" class="px-3 py-1.5 text-sm bg-indigo-600 text-white font-medium focus:outline-none">Increment Approval</button>
+          <button id="staff-status-tab-ongoing" class="px-3 py-1.5 text-sm bg-white text-gray-700 hover:bg-indigo-50 focus:outline-none">On Going</button>
+        </div>
+        <div class="relative">
+          <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
+          <input id="staff-status-search" type="text" class="modal-input pl-9 w-72" placeholder="Search (name, designation, branch, gap)">
+        </div>
+      </div>
+    </div>
+    <div id="staff-status-empty" class="hidden text-center text-gray-500 py-12">
+      <i class="fas fa-circle-info text-3xl mb-2 block opacity-50"></i>
+      No staff to show
+    </div>
+    <div id="staff-status-panel-approval">
+      <h4 class="text-lg font-semibold text-gray-700 mb-2">Increment Approval</h4>
+      <div id="staff-status-approval-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
+    </div>
+    <div id="staff-status-panel-ongoing" class="hidden">
+      <h4 class="text-lg font-semibold text-gray-700 mb-2">On Going</h4>
+      <div id="staff-status-ongoing-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
+    </div>
+  `;
+
+  // Get data via existing categorization
+  const section = createStaffStatusSection();
+  const allH3 = section.querySelectorAll('h3');
+  const approvalGridSrc = allH3[0]?.nextElementSibling || document.createElement('div');
+  const ongoingGridSrc = allH3[1]?.nextElementSibling || document.createElement('div');
+
+  const approvalGrid = document.getElementById('staff-status-approval-grid');
+  const ongoingGrid = document.getElementById('staff-status-ongoing-grid');
+
+  // Recreate cards to ensure datasets are present and consistent
+  const approvalCards = Array.from(approvalGridSrc.querySelectorAll('.staff-card'));
+  const ongoingCards = Array.from(ongoingGridSrc.querySelectorAll('.staff-card'));
+
+  // Count badges
+  const cntApproval = document.getElementById('staff-status-count-approval');
+  const cntOngoing = document.getElementById('staff-status-count-ongoing');
+  if (cntApproval) cntApproval.textContent = String(approvalCards.length);
+  if (cntOngoing) cntOngoing.textContent = String(ongoingCards.length);
+
+  // Move built cards into our modal grids
+  approvalCards.forEach(card => approvalGrid.appendChild(card));
+  ongoingCards.forEach(card => ongoingGrid.appendChild(card));
+
+  // Handle empty state
+  const empty = document.getElementById('staff-status-empty');
+  if (empty) empty.classList.toggle('hidden', approvalCards.length + ongoingCards.length > 0);
+
+  // Tabs switching
+  const tabApproval = document.getElementById('staff-status-tab-approval');
+  const tabOngoing = document.getElementById('staff-status-tab-ongoing');
+  const panelApproval = document.getElementById('staff-status-panel-approval');
+  const panelOngoing = document.getElementById('staff-status-panel-ongoing');
+
+  function activateTab(which) {
+    const isApproval = which === 'approval';
+    panelApproval.classList.toggle('hidden', !isApproval);
+    panelOngoing.classList.toggle('hidden', isApproval);
+    tabApproval.classList.toggle('bg-indigo-600', isApproval);
+    tabApproval.classList.toggle('text-white', isApproval);
+    tabApproval.classList.toggle('bg-white', !isApproval);
+    tabApproval.classList.toggle('text-gray-700', !isApproval);
+    tabOngoing.classList.toggle('bg-indigo-600', !isApproval);
+    tabOngoing.classList.toggle('text-white', !isApproval);
+    tabOngoing.classList.toggle('bg-white', isApproval);
+    tabOngoing.classList.toggle('text-gray-700', isApproval);
+
+    // Toggle badges accent to follow active tab
+    const badgeApproval = document.getElementById('badge-approval');
+    const badgeOngoing = document.getElementById('badge-ongoing');
+    if (badgeApproval && badgeOngoing) {
+      if (isApproval) {
+        badgeApproval.classList.add('bg-purple-100','text-purple-700');
+        badgeApproval.classList.remove('bg-gray-100','text-gray-700');
+        badgeOngoing.classList.add('bg-gray-100','text-gray-700');
+        badgeOngoing.classList.remove('bg-purple-100','text-purple-700');
+      } else {
+        badgeApproval.classList.add('bg-gray-100','text-gray-700');
+        badgeApproval.classList.remove('bg-purple-100','text-purple-700');
+        badgeOngoing.classList.add('bg-purple-100','text-purple-700');
+        badgeOngoing.classList.remove('bg-gray-100','text-gray-700');
+      }
+    }
+  }
+  if (tabApproval) tabApproval.onclick = () => { GLOBAL_STATE.staffStatusState = Object.assign({}, GLOBAL_STATE.staffStatusState, { activeTab: 'approval' }); activateTab('approval'); };
+  if (tabOngoing) tabOngoing.onclick = () => { GLOBAL_STATE.staffStatusState = Object.assign({}, GLOBAL_STATE.staffStatusState, { activeTab: 'ongoing' }); activateTab('ongoing'); };
+  // Restore previous tab
+  const initialTab = (GLOBAL_STATE.staffStatusState && GLOBAL_STATE.staffStatusState.activeTab) || 'approval';
+  activateTab(initialTab);
+
+  // Search filter (applies to visible panel)
+  const searchInput = document.getElementById('staff-status-search');
+  function filterVisiblePanel() {
+    const q = (searchInput?.value || '').toLowerCase();
+    const panel = panelOngoing.classList.contains('hidden') ? approvalGrid : ongoingGrid;
+    const cards = panel.querySelectorAll('.staff-card');
+    let visible = 0;
+    cards.forEach(card => {
+      const name = (card.dataset.name || '').toLowerCase();
+      const desig = (card.dataset.designation || '').toLowerCase();
+      const mobile = (card.dataset.mobile || '').toLowerCase();
+      const branch = (card.dataset.branch || '').toLowerCase();
+      const gap = (card.dataset.gap || '').toLowerCase();
+      const matches = !q || name.includes(q) || desig.includes(q) || mobile.includes(q) || branch.includes(q) || gap.includes(q);
+      card.style.display = matches ? 'flex' : 'none';
+      if (matches) visible++;
+    });
+    // Optional per-panel empty message could be added here
+  }
+  if (searchInput) {
+    // Restore previous search value
+    if (GLOBAL_STATE.staffStatusState && GLOBAL_STATE.staffStatusState.search) {
+      searchInput.value = GLOBAL_STATE.staffStatusState.search;
+      filterVisiblePanel();
+    }
+    searchInput.addEventListener('input', () => {
+      GLOBAL_STATE.staffStatusState = Object.assign({}, GLOBAL_STATE.staffStatusState, { search: searchInput.value || '' });
+      filterVisiblePanel();
+    });
+  }
+
+  // Restore scroll position inside modal body
+  const bodyEl = document.getElementById('staff-status-body');
+  if (bodyEl) {
+    if (GLOBAL_STATE.staffStatusState && typeof GLOBAL_STATE.staffStatusState.scrollTop === 'number') {
+      bodyEl.scrollTop = GLOBAL_STATE.staffStatusState.scrollTop;
+    }
+    bodyEl.addEventListener('scroll', () => {
+      GLOBAL_STATE.staffStatusState = Object.assign({}, GLOBAL_STATE.staffStatusState, { scrollTop: bodyEl.scrollTop });
+    });
+  }
+}
+
 function renderAllBranches() {
   const mainContent = $('#main-content');
   mainContent.innerHTML = '';
+  // Do not render Staff Status on homepage; it will open in a fullscreen modal
   if (!allData || allData.length === 0) {
-    mainContent.innerHTML = '<p class="text-center text-gray-500">No branches found. Admin can add a new branch.</p>';
+    mainContent.innerHTML += '<p class="text-center text-gray-500">No branches found. Admin can add a new branch.</p>';
+    updateAdminUI();
     return;
   }
   allData.forEach(branch => {
@@ -1361,7 +1688,7 @@ function createStaffGrid(title, staffList, branchName) {
   container.appendChild(grid);
   return container;
 }
-function createStaffCard(staff, branchName) {
+function createStaffCard(staff, branchName, options = {}) {
   const card = document.createElement('div');
   card.className = 'staff-card fade-in cursor-pointer';
   card.setAttribute('tabindex', '0');
@@ -1372,6 +1699,7 @@ function createStaffCard(staff, branchName) {
   card.dataset.name = escapeHtml(staff['Full Name'] || '');
   card.dataset.designation = escapeHtml(staff['Designation'] || '');
   card.dataset.mobile = escapeHtml(formatMobile(staff['Mobile']) || '');
+  card.dataset.branch = escapeHtml(branchName || '');
 
   const fullName = escapeHtml(staff['Full Name'] || 'N/A');
   const designation = escapeHtml(staff['Designation'] || 'N/A');
@@ -1518,36 +1846,66 @@ function createStaffCard(staff, branchName) {
   
   const staffInfo = document.createElement('div');
   staffInfo.className = 'staff-info-enhanced';
-  
-  if (mobile && mobile !== 'N/A') {
-    const mobileEl = document.createElement('div');
-    mobileEl.className = 'info-item-enhanced';
-    mobileEl.innerHTML = `
+
+  if (options && options.view === 'status') {
+    // Show branch name
+    const branchEl = document.createElement('div');
+    branchEl.className = 'info-item-enhanced';
+    branchEl.innerHTML = `
       <div class="info-background-layer"></div>
       <div class="info-content">
-        <i class="fas fa-phone-alt"></i> 
-        <span>${mobile}</span>
+        <i class="fas fa-code-branch"></i>
+        <span>${escapeHtml(branchName || 'N/A')}</span>
       </div>
     `;
-    mobileEl.title = `Click to call ${mobile}`;
-    mobileEl.setAttribute('data-action', 'call');
-    staffInfo.appendChild(mobileEl);
-  }
-  
-  if (currentAddress && currentAddress !== 'N/A') {
-    const addressEl = document.createElement('div');
-    addressEl.className = 'info-item-enhanced';
-    addressEl.innerHTML = `
+    branchEl.title = `Branch: ${branchName || 'N/A'}`;
+    staffInfo.appendChild(branchEl);
+
+    // Show gap text
+    const gapText = options.gapText || 'N/A';
+    // Store gap text for client-side filtering
+    card.dataset.gap = gapText.toLowerCase();
+    const gapEl = document.createElement('div');
+    gapEl.className = 'info-item-enhanced';
+    gapEl.innerHTML = `
       <div class="info-background-layer"></div>
       <div class="info-content">
-        <i class="fas fa-map-marker-alt"></i> 
-        <span>${currentAddress}</span>
+        <i class="fas fa-hourglass-half"></i>
+        <span>${escapeHtml(gapText)}</span>
       </div>
     `;
-    addressEl.title = `Address: ${currentAddress}`;
-    staffInfo.appendChild(addressEl);
+    gapEl.title = `Gap: ${gapText}`;
+    staffInfo.appendChild(gapEl);
+  } else {
+    if (mobile && mobile !== 'N/A') {
+      const mobileEl = document.createElement('div');
+      mobileEl.className = 'info-item-enhanced';
+      mobileEl.innerHTML = `
+        <div class="info-background-layer"></div>
+        <div class="info-content">
+          <i class="fas fa-phone-alt"></i> 
+          <span>${mobile}</span>
+        </div>
+      `;
+      mobileEl.title = `Click to call ${mobile}`;
+      mobileEl.setAttribute('data-action', 'call');
+      staffInfo.appendChild(mobileEl);
+    }
+    if (currentAddress && currentAddress !== 'N/A') {
+      const addressEl = document.createElement('div');
+      addressEl.className = 'info-item-enhanced';
+      addressEl.innerHTML = `
+        <div class="info-background-layer"></div>
+        <div class="info-content">
+          <i class="fas fa-map-marker-alt"></i> 
+          <span>${currentAddress}</span>
+        </div>
+      `;
+      addressEl.title = `Address: ${currentAddress}`;
+      staffInfo.appendChild(addressEl);
+    }
   }
-  
+
   fragmentBody.appendChild(staffInfo);
   
   // Status indicator
@@ -1690,9 +2048,14 @@ function createStaffCard(staff, branchName) {
         showNotification('Permission denied: Edit Staff', 'error');
         return;
       }
-      $$('.modal-container').forEach(m => m.classList.add('hidden'));
+      // If Staff Status modal is open, keep it visible; otherwise hide other modals
+      const statusModal = document.getElementById('staff-status-modal');
+      const isStatusOpen = statusModal && !statusModal.classList.contains('hidden');
+      if (!isStatusOpen) {
+        $('.modal-container').forEach(m => m.classList.add('hidden'));
+      }
       $('#modal-backdrop').classList.remove('hidden');
-      setTimeout(() => openStaffModal(staff, branchName), 100);
+      openStaffModal(staff, branchName);
     } else if (btn.classList.contains('delete')) {
       if (!adminHasRight('canDeleteStaff') || !adminHasBranch(branchName)) {
         showNotification('Permission denied: Delete Staff', 'error');
@@ -1849,6 +2212,10 @@ function updateAdminUI() {
   if (branchBtn) {
     const canBranchOps = adminHasRight('canAddBranch') || adminHasRight('canDeleteBranch') || adminHasRight('canRenameBranch');
     branchBtn.classList.toggle('hidden', !isAdmin || !canBranchOps);
+  }
+  const staffStatusBtn = $('#staff-status-button');
+  if (staffStatusBtn) {
+    staffStatusBtn.classList.toggle('hidden', !isAdmin);
   }
   const changePwdBtn = $('#change-password-button');
   if (changePwdBtn) {
