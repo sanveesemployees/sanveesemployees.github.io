@@ -627,12 +627,34 @@ function setupAllEventListeners() {
   if (staffStatusBtn) {
     staffStatusBtn.onclick = () => {
       try {
-        renderStaffStatusModal();
+        // 1. Open the modal immediately to prevent UI freeze
         openModal('staff-status-modal');
-        // Lock page scroll while status modal is open
         document.body.style.overflow = 'hidden';
+
+        // 2. Show a loading state inside the modal body
+        const body = document.getElementById('staff-status-body');
+        if (body) {
+          body.innerHTML = '<div class="text-center py-20"><i class="fas fa-spinner fa-spin text-4xl text-purple-600"></i><p class="mt-2 text-gray-600">Loading Staff Status...</p></div>';
+        }
+
+        // 3. Defer the heavy rendering task to a separate thread
+        setTimeout(() => {
+          try {
+            renderStaffStatusModal();
+          } catch (e) {
+            handleError(e, 'Failed to render Staff Status content');
+            if (body) {
+              body.innerHTML = '<div class="text-center py-20 text-red-500"><i class="fas fa-exclamation-triangle text-4xl"></i><p class="mt-2">Could not load staff status.</p></div>';
+            }
+          }
+        }, 50); // A small delay allows the UI to update and show the modal before heavy work begins.
+
       } catch (e) {
         handleError(e, 'Failed to open Staff Status');
+        // Ensure modal is closed and scroll unlocked on critical error
+        const modal = document.getElementById('staff-status-modal');
+        if (modal) closeModal(modal);
+        document.body.style.overflow = '';
       }
     };
   }
@@ -1386,16 +1408,9 @@ function getStaffStatusCategory(staff) {
   }
   return { category: 'ongoing', ref: 'none', diff: null };
 }
-function createStaffStatusSection() {
-  const section = document.createElement('section');
-  section.id = 'staff-status-section';
-  section.className = 'mb-12';
-  const header = document.createElement('div');
-  header.className = 'flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 pb-2 border-b-2 border-purple-500';
-  header.innerHTML = `<div><h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-user-clock text-purple-600 mr-2"></i>Staff Status</h2></div>`;
-  section.appendChild(header);
-
-  // Aggregate staff across all branches (current staff only)
+// Renamed from createStaffStatusSection for clarity.
+// This function now only processes data and does not touch the DOM.
+function getStaffStatusData() {
   const approvalList = [];
   const ongoingList = [];
   (allData || []).forEach(branch => {
@@ -1404,44 +1419,33 @@ function createStaffStatusSection() {
       const status = getStaffStatusCategory(staff);
       const gapText = status.diff ? formatGapText(status.diff) : 'N/A';
       const payload = { staff, branchName: branch.branchName, gapText };
-      if (status.category === 'approval') approvalList.push(payload); else ongoingList.push(payload);
+      if (status.category === 'approval') {
+        approvalList.push(payload);
+      } else {
+        ongoingList.push(payload);
+      }
     });
   });
-
-  function buildGrid(title, list) {
-    const wrap = document.createElement('div');
-    wrap.innerHTML = `<h3 class="text-xl font-semibold text-gray-700 mt-2 mb-4">${title}</h3>`;
-    const grid = document.createElement('div');
-    grid.className = 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6';
-    if (list.length === 0) {
-      grid.innerHTML = `<p class="text-gray-500 italic col-span-full">No staff in this section.</p>`;
-    } else {
-      list.forEach(({ staff, branchName, gapText }) => {
-        grid.appendChild(createStaffCard(staff, branchName, { view: 'status', gapText }));
-      });
-    }
-    wrap.appendChild(grid);
-    return wrap;
-  }
-
-  section.appendChild(buildGrid('Increment Approval', approvalList));
-  section.appendChild(buildGrid('On Going', ongoingList));
-  return section;
+  return { approvalList, ongoingList };
 }
 
 // Render improved Staff Status modal with tabs, counts and search
 function renderStaffStatusModal() {
   const body = document.getElementById('staff-status-body');
   if (!body) return;
-  // Build UI shell (toolbar + two panels)
+
+  // 1. Get the processed data first, without touching the DOM
+  const { approvalList, ongoingList } = getStaffStatusData();
+
+  // 2. Build the UI shell. This is fast.
   body.innerHTML = `
     <div class="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
       <div class="flex items-center gap-2">
         <span id="badge-approval" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
-          <i class=\"fas fa-arrow-up-wide-short mr-1\"></i> Approval <span id="staff-status-count-approval" class="ml-1">0</span>
+          <i class="fas fa-arrow-up-wide-short mr-1"></i> Approval <span id="staff-status-count-approval" class="ml-1">0</span>
         </span>
         <span id="badge-ongoing" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-          <i class=\"fas fa-rotate mr-1\"></i> On Going <span id="staff-status-count-ongoing" class="ml-1">0</span>
+          <i class="fas fa-rotate mr-1"></i> On Going <span id="staff-status-count-ongoing" class="ml-1">0</span>
         </span>
       </div>
       <div class="flex items-center gap-2">
@@ -1469,34 +1473,32 @@ function renderStaffStatusModal() {
     </div>
   `;
 
-  // Get data via existing categorization
-  const section = createStaffStatusSection();
-  const allH3 = section.querySelectorAll('h3');
-  const approvalGridSrc = allH3[0]?.nextElementSibling || document.createElement('div');
-  const ongoingGridSrc = allH3[1]?.nextElementSibling || document.createElement('div');
-
   const approvalGrid = document.getElementById('staff-status-approval-grid');
   const ongoingGrid = document.getElementById('staff-status-ongoing-grid');
 
-  // Recreate cards to ensure datasets are present and consistent
-  const approvalCards = Array.from(approvalGridSrc.querySelectorAll('.staff-card'));
-  const ongoingCards = Array.from(ongoingGridSrc.querySelectorAll('.staff-card'));
+  // 3. Use DocumentFragments for efficient batch DOM insertion
+  const approvalFragment = document.createDocumentFragment();
+  approvalList.forEach(({ staff, branchName, gapText }) => {
+    approvalFragment.appendChild(createStaffCard(staff, branchName, { view: 'status', gapText }));
+  });
+  approvalGrid.appendChild(approvalFragment);
 
-  // Count badges
+  const ongoingFragment = document.createDocumentFragment();
+  ongoingList.forEach(({ staff, branchName, gapText }) => {
+    ongoingFragment.appendChild(createStaffCard(staff, branchName, { view: 'status', gapText }));
+  });
+  ongoingGrid.appendChild(ongoingFragment);
+
+  // 4. Update counts and empty state
   const cntApproval = document.getElementById('staff-status-count-approval');
   const cntOngoing = document.getElementById('staff-status-count-ongoing');
-  if (cntApproval) cntApproval.textContent = String(approvalCards.length);
-  if (cntOngoing) cntOngoing.textContent = String(ongoingCards.length);
+  if (cntApproval) cntApproval.textContent = String(approvalList.length);
+  if (cntOngoing) cntOngoing.textContent = String(ongoingList.length);
 
-  // Move built cards into our modal grids
-  approvalCards.forEach(card => approvalGrid.appendChild(card));
-  ongoingCards.forEach(card => ongoingGrid.appendChild(card));
-
-  // Handle empty state
   const empty = document.getElementById('staff-status-empty');
-  if (empty) empty.classList.toggle('hidden', approvalCards.length + ongoingCards.length > 0);
+  if (empty) empty.classList.toggle('hidden', approvalList.length + ongoingList.length > 0);
 
-  // Tabs switching
+  // 5. Set up event handlers and restore state (this part is already efficient)
   const tabApproval = document.getElementById('staff-status-tab-approval');
   const tabOngoing = document.getElementById('staff-status-tab-ongoing');
   const panelApproval = document.getElementById('staff-status-panel-approval');
@@ -1515,7 +1517,6 @@ function renderStaffStatusModal() {
     tabOngoing.classList.toggle('bg-white', isApproval);
     tabOngoing.classList.toggle('text-gray-700', isApproval);
 
-    // Toggle badges accent to follow active tab
     const badgeApproval = document.getElementById('badge-approval');
     const badgeOngoing = document.getElementById('badge-ongoing');
     if (badgeApproval && badgeOngoing) {
@@ -1532,19 +1533,17 @@ function renderStaffStatusModal() {
       }
     }
   }
-  if (tabApproval) tabApproval.onclick = () => { GLOBAL_STATE.staffStatusState = Object.assign({}, GLOBAL_STATE.staffStatusState, { activeTab: 'approval' }); activateTab('approval'); };
-  if (tabOngoing) tabOngoing.onclick = () => { GLOBAL_STATE.staffStatusState = Object.assign({}, GLOBAL_STATE.staffStatusState, { activeTab: 'ongoing' }); activateTab('ongoing'); };
-  // Restore previous tab
-  const initialTab = (GLOBAL_STATE.staffStatusState && GLOBAL_STATE.staffStatusState.activeTab) || 'approval';
+  if (tabApproval) tabApproval.onclick = () => { GLOBAL_STATE.staffStatusState = { ...GLOBAL_STATE.staffStatusState, activeTab: 'approval' }; activateTab('approval'); };
+  if (tabOngoing) tabOngoing.onclick = () => { GLOBAL_STATE.staffStatusState = { ...GLOBAL_STATE.staffStatusState, activeTab: 'ongoing' }; activateTab('ongoing'); };
+  
+  const initialTab = GLOBAL_STATE.staffStatusState?.activeTab || 'approval';
   activateTab(initialTab);
 
-  // Search filter (applies to visible panel)
   const searchInput = document.getElementById('staff-status-search');
   function filterVisiblePanel() {
     const q = (searchInput?.value || '').toLowerCase();
     const panel = panelOngoing.classList.contains('hidden') ? approvalGrid : ongoingGrid;
     const cards = panel.querySelectorAll('.staff-card');
-    let visible = 0;
     cards.forEach(card => {
       const name = (card.dataset.name || '').toLowerCase();
       const desig = (card.dataset.designation || '').toLowerCase();
@@ -1553,30 +1552,26 @@ function renderStaffStatusModal() {
       const gap = (card.dataset.gap || '').toLowerCase();
       const matches = !q || name.includes(q) || desig.includes(q) || mobile.includes(q) || branch.includes(q) || gap.includes(q);
       card.style.display = matches ? 'flex' : 'none';
-      if (matches) visible++;
     });
-    // Optional per-panel empty message could be added here
   }
   if (searchInput) {
-    // Restore previous search value
-    if (GLOBAL_STATE.staffStatusState && GLOBAL_STATE.staffStatusState.search) {
+    if (GLOBAL_STATE.staffStatusState?.search) {
       searchInput.value = GLOBAL_STATE.staffStatusState.search;
       filterVisiblePanel();
     }
     searchInput.addEventListener('input', () => {
-      GLOBAL_STATE.staffStatusState = Object.assign({}, GLOBAL_STATE.staffStatusState, { search: searchInput.value || '' });
+      GLOBAL_STATE.staffStatusState = { ...GLOBAL_STATE.staffStatusState, search: searchInput.value || '' };
       filterVisiblePanel();
     });
   }
 
-  // Restore scroll position inside modal body
   const bodyEl = document.getElementById('staff-status-body');
   if (bodyEl) {
-    if (GLOBAL_STATE.staffStatusState && typeof GLOBAL_STATE.staffStatusState.scrollTop === 'number') {
+    if (typeof GLOBAL_STATE.staffStatusState?.scrollTop === 'number') {
       bodyEl.scrollTop = GLOBAL_STATE.staffStatusState.scrollTop;
     }
     bodyEl.addEventListener('scroll', () => {
-      GLOBAL_STATE.staffStatusState = Object.assign({}, GLOBAL_STATE.staffStatusState, { scrollTop: bodyEl.scrollTop });
+      GLOBAL_STATE.staffStatusState = { ...GLOBAL_STATE.staffStatusState, scrollTop: bodyEl.scrollTop };
     });
   }
 }
@@ -1584,12 +1579,12 @@ function renderStaffStatusModal() {
 function renderAllBranches() {
   const mainContent = $('#main-content');
   mainContent.innerHTML = '';
-  // Do not render Staff Status on homepage; it will open in a fullscreen modal
   if (!allData || allData.length === 0) {
-    mainContent.innerHTML += '<p class="text-center text-gray-500">No branches found. Admin can add a new branch.</p>';
+    mainContent.innerHTML = '<p class="text-center text-gray-500">No branches found. Admin can add a new branch.</p>';
     updateAdminUI();
     return;
   }
+  // The Staff Status section is now only rendered inside its modal, not on the main page.
   allData.forEach(branch => {
     mainContent.appendChild(createBranchSection(branch));
   });
