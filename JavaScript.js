@@ -1,7 +1,7 @@
 // Branch Staff Directory JavaScript (refactored for safety, usability, and maintainability)
 
 // === CONSTANTS & UTILITIES ===
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx8YWyrWB8Q3uVB7F-jN5sA6tQFgngoA1AQ-tSFcQ2cRsaJbFuX297MMILtD5K7UCkLvQ/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwpC3yx4TNwq-vEJiO2HeJ54X0TPWiKLZW_yypByCkbz2Cgc5_ABafmrWoZUBZJo2Kp/exec';
 const FALLBACK_THUMBNAIL = "https://drive.google.com/thumbnail?id=1iUQhelba6oMDa5Lb3EuZL_B4_MS4plzC";
 const FALLBACK_PHOTO = "https://drive.google.com/uc?export=download&id=1iUQhelba6oMDa5Lb3EuZL_B4_MS4plzC";
 
