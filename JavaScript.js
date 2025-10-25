@@ -1,7 +1,7 @@
 // Branch Staff Directory JavaScript (refactored for safety, usability, and maintainability)
 
 // === CONSTANTS & UTILITIES ===
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwpC3yx4TNwq-vEJiO2HeJ54X0TPWiKLZW_yypByCkbz2Cgc5_ABafmrWoZUBZJo2Kp/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx8YWyrWB8Q3uVB7F-jN5sA6tQFgngoA1AQ-tSFcQ2cRsaJbFuX297MMILtD5K7UCkLvQ/exec';
 const FALLBACK_THUMBNAIL = "https://drive.google.com/thumbnail?id=1iUQhelba6oMDa5Lb3EuZL_B4_MS4plzC";
 const FALLBACK_PHOTO = "https://drive.google.com/uc?export=download&id=1iUQhelba6oMDa5Lb3EuZL_B4_MS4plzC";
 
@@ -143,7 +143,10 @@ function openModal(modalId) {
   const modalBackdrop = $('#modal-backdrop');
   const modal = document.getElementById(modalId);
   if (!modal) return;
-  if (modalBackdrop) modalBackdrop.classList.remove('hidden');
+  if (modalBackdrop) {
+    modalBackdrop.classList.remove('hidden');
+    modalBackdrop.style.zIndex = 99;
+  }
   modal.classList.remove('hidden');
 }
 function closeModal(modalElement) {
@@ -467,11 +470,31 @@ function showConfirmModal({ title = 'Confirm', message = '', confirmText = 'Conf
     }
     modal.querySelector('#confirm-title').textContent = title;
     modal.querySelector('#confirm-message').textContent = message;
-    $('#modal-backdrop').classList.remove('hidden');
+    // Raise backdrop and modal z-index so this confirm dialog appears on top of any other modal
+    const backdrop = $('#modal-backdrop');
+    if (backdrop) {
+      // store previous zIndex to restore later
+      if (typeof backdrop.dataset.prevZ === 'undefined') backdrop.dataset.prevZ = backdrop.style.zIndex || '';
+      backdrop.style.zIndex = '9998';
+      backdrop.classList.remove('hidden');
+    }
+    // ensure modal is on top
+    modal.style.zIndex = '9999';
     modal.classList.remove('hidden');
     const cleanup = (val) => {
       modal.classList.add('hidden');
-      $('#modal-backdrop').classList.add('hidden');
+      // restore backdrop z-index and hide only if no other modal requires it
+      const backdrop = $('#modal-backdrop');
+      if (backdrop) {
+        // restore previous zIndex
+        if (typeof backdrop.dataset.prevZ !== 'undefined') {
+          backdrop.style.zIndex = backdrop.dataset.prevZ || '';
+          delete backdrop.dataset.prevZ;
+        } else {
+          backdrop.style.zIndex = '';
+        }
+        backdrop.classList.add('hidden');
+      }
       resolve(val);
     };
     const okBtn = modal.querySelector('#confirm-ok');
@@ -598,12 +621,107 @@ document.addEventListener("DOMContentLoaded", () => {
   } catch (e) { /* no-op */ }
   // loadInitialData is invoked after checkAdminSession completes above
   setupAllEventListeners();
+  document.body.addEventListener('click', handleUnifiedClick);
   
   // Initialize enhanced card interactions after data loads
   setTimeout(() => {
     addCardInteractionEffects();
   }, 1000);
 });
+
+function handleUnifiedClick(e) {
+    const actionEl = e.target.closest('[data-action]');
+    if (!actionEl) return;
+
+    const action = actionEl.dataset.action;
+
+    switch (action) {
+        case 'edit-staff': {
+            const card = actionEl.closest('.staff-card');
+            if (card) {
+                const staffName = card.dataset.name;
+                const branchName = card.dataset.branch;
+                const staff = findStaff(staffName, branchName);
+                if (staff) {
+                    openStaffModal(staff, branchName);
+                }
+            }
+            break;
+        }
+        case 'delete-staff': {
+            const card = actionEl.closest('.staff-card');
+            if (card) {
+                const staffName = card.dataset.name;
+                const branchName = card.dataset.branch;
+                const staff = findStaff(staffName, branchName);
+                if (staff) {
+                    deleteStaffHandler(staff, branchName);
+                }
+            }
+            break;
+        }
+        case 'rename-branch': {
+            const branchName = actionEl.dataset.branch;
+            if (branchName) {
+                openRenameBranchModal(branchName);
+            }
+            break;
+        }
+        case 'edit-staff-modal': {
+            const staff = JSON.parse(actionEl.dataset.staff);
+            const branchName = actionEl.dataset.branch;
+            closeModal(actionEl.closest('.modal-container'));
+            setTimeout(() => openStaffModal(staff, branchName), 200);
+            break;
+        }
+    }
+}
+
+function findStaff(staffName, branchName) {
+    const branch = allData.find(b => b.branchName === branchName);
+    if (branch) {
+        // find staff in current or former staff
+        let staff = branch.currentStaff.find(s => s['Full Name'] === staffName);
+        if (staff) return staff;
+        staff = branch.formerStaff.find(s => s['Full Name'] === staffName);
+        return staff;
+    }
+    return null;
+}
+
+function openRenameBranchModal(branchName) {
+    if (!adminHasRight('canRenameBranch') || !adminHasBranch(branchName)) {
+        showNotification('Permission denied: Rename Branch', 'error');
+        return;
+    }
+    const renameBtn = document.querySelector(`.rename-branch-btn[data-branch="${branchName}"]`);
+    openPromptModal({
+        title: "Rename Branch",
+        message: `Enter a new name for branch \"${branchName}\":`,
+        confirmText: "Rename",
+        callback: (newName) => {
+            if (!newName) {
+                showNotification('Branch name cannot be empty.', 'error');
+                return;
+            }
+            showLoader();
+            if(renameBtn) setButtonLoading(renameBtn, true, '<i class="fas fa-edit mr-1"></i> Renaming...');
+            postData('renameBranch', {
+                    oldName: branchName,
+                    newName
+                })
+                .then(response => {
+                    showNotification(response.message, 'success');
+                    loadInitialData();
+                })
+                .catch(e => handleError(e, 'Error renaming branch'))
+                .finally(() => {
+                    hideLoader();
+                    if(renameBtn) setButtonLoading(renameBtn, false);
+                });
+        }
+    });
+}
 
 function setupAllEventListeners() {
   // Admin login
@@ -731,6 +849,56 @@ function setupAllEventListeners() {
   setupStaffForm();
   setupBranchUIControls();
   setupGlobalSearch();
+
+  // Bind per-branch header actions (Add Staff, Delete/Rename Branch) via event delegation
+  if (!document.body.__branchHeaderActionsBound) {
+    document.body.addEventListener('click', async (e) => {
+      // Add Staff
+      const addBtn = e.target.closest('.add-staff-btn');
+      if (addBtn) {
+        const branchName = addBtn.getAttribute('data-branch');
+        if (!adminHasRight('canEditStaff') || !adminHasBranch(branchName)) {
+          showNotification('Permission denied: Add Staff', 'error');
+          return;
+        }
+        GLOBAL_STATE.currentBranch = branchName;
+        openStaffModal(null, branchName);
+        return;
+      }
+      // Delete Branch
+      const delBtn = e.target.closest('.delete-branch-btn');
+      if (delBtn) {
+        const branchName = delBtn.getAttribute('data-branch');
+        if (!adminHasRight('canDeleteBranch') || !adminHasBranch(branchName)) {
+          showNotification('Permission denied: Delete Branch', 'error');
+          return;
+        }
+        const confirmed = await showConfirmModal({
+          title: 'Delete Branch',
+          message: `Are you sure you want to delete the branch "${branchName}"? This cannot be undone.`,
+          confirmText: 'Delete',
+          cancelText: 'Cancel'
+        });
+        if (!confirmed) return;
+        try {
+          showLoader();
+          setButtonLoading(delBtn, true, '<i class="fas fa-trash-alt"></i> Deleting...');
+          const res = await postData('deleteBranch', { branchName });
+          showNotification(res.message || 'Branch deleted', res.status === 'success' ? 'success' : 'error');
+          if (res.status === 'success') {
+            loadInitialData();
+          }
+        } catch (err) {
+          handleError(err, 'Error deleting branch');
+        } finally {
+          hideLoader();
+          setButtonLoading(delBtn, false);
+        }
+        return;
+      }
+    });
+    document.body.__branchHeaderActionsBound = true;
+  }
 
   // Admin Settings Modal Tab Switching
   if ($('#admin-settings-modal')) {
@@ -1601,9 +1769,9 @@ function createBranchSection(branch) {
     const canRenameBranch = adminHasRight('canRenameBranch') && adminHasBranch(branch.branchName);
     const canDeleteBranch = adminHasRight('canDeleteBranch') && adminHasBranch(branch.branchName);
     const parts = [];
-    if (canAddStaff) parts.push(`<button class="add-staff-btn text-sm py-2 px-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700" data-branch="${branch.branchName}"><i class="fas fa-user-plus mr-1"></i> Add Staff</button>`);
-    if (canRenameBranch) parts.push(`<button class="rename-branch-btn text-sm py-2 px-3 bg-blue-600 text-white rounded-md hover:bg-blue-700" data-branch="${branch.branchName}"><i class="fas fa-edit mr-1"></i> Rename Branch</button>`);
-    if (canDeleteBranch) parts.push(`<button class="delete-branch-btn text-sm py-2 px-3 bg-red-600 text-white rounded-md hover:bg-red-700" data-branch="${branch.branchName}"><i class="fas fa-trash-alt"></i> Delete Branch</button>`);
+    if (canAddStaff) parts.push(`<button class="add-staff-btn text-sm py-2 px-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700" data-branch="${branch.branchName}" data-action="add-staff"><i class="fas fa-user-plus mr-1"></i> Add Staff</button>`);
+    if (canRenameBranch) parts.push(`<button class="rename-branch-btn text-sm py-2 px-3 bg-blue-600 text-white rounded-md hover:bg-blue-700" data-branch="${branch.branchName}" data-action="rename-branch"><i class="fas fa-edit mr-1"></i> Rename Branch</button>`);
+    if (canDeleteBranch) parts.push(`<button class="delete-branch-btn text-sm py-2 px-3 bg-red-600 text-white rounded-md hover:bg-red-700" data-branch="${branch.branchName}" data-action="delete-branch"><i class="fas fa-trash-alt"></i> Delete Branch</button>`);
     if (parts.length) {
       adminButtons = `<div class="space-x-2">${parts.join(' ')}</div>`;
     }
@@ -1613,58 +1781,20 @@ function createBranchSection(branch) {
     ${adminButtons}
     </div>
     <div class="mb-4"><input type="text" placeholder="Search staff in ${escapeHtml(branch.branchName)}..." class="search-box w-full p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"></div>`;
-  section.appendChild(createStaffGrid('Current Staff', branch.currentStaff, branch.branchName));
-  if (branch.formerStaff.length > 0 || isAdmin) {
-    section.appendChild(createStaffGrid('Former Staff', branch.formerStaff, branch.branchName));
+  // Sort by salary (descending) before rendering
+  const parseSalary = (s) => {
+    if (s == null) return -Infinity;
+    const n = Number(String(s).toString().replace(/[^\d.\-]/g, ''));
+    return isNaN(n) ? -Infinity : n;
+  };
+  const currentSorted = (branch.currentStaff || []).slice().sort((a,b)=> parseSalary(b['Salary']) - parseSalary(a['Salary']));
+  const formerSorted = (branch.formerStaff || []).slice().sort((a,b)=> parseSalary(b['Salary']) - parseSalary(a['Salary']));
+
+  section.appendChild(createStaffGrid('Current Staff', currentSorted, branch.branchName));
+  if (formerSorted.length > 0 || isAdmin) {
+    section.appendChild(createStaffGrid('Former Staff', formerSorted, branch.branchName));
   }
   section.querySelector('.search-box').addEventListener('keyup', handleSearch);
-  // Attach button events (delegated where feasible)
-  section.onclick = async function (e) {
-    if (e.target.closest('.delete-branch-btn')) {
-      const deleteBtn = e.target.closest('.delete-branch-btn');
-      const branchName = deleteBtn.dataset.branch;
-      if (!adminHasRight('canDeleteBranch') || !adminHasBranch(branchName)) {
-        showNotification('Permission denied: Delete Branch', 'error');
-        return;
-      }
-      const ok = await showConfirmModal({ title: 'Delete Branch', message: `Are you sure you want to permanently delete the "${branchName}" branch? This cannot be undone.`, confirmText: 'Delete', cancelText: 'Cancel' });
-      if (!ok) return;
-      showLoader();
-      setButtonLoading(deleteBtn, true, '<i class="fas fa-trash-alt mr-1"></i> Deleting...');
-      postData('deleteBranch', { branchName })
-        .then(response => { showNotification(response.message, 'success'); loadInitialData(); })
-        .catch(e => handleError(e, 'Error deleting branch'))
-        .finally(() => { hideLoader(); setButtonLoading(deleteBtn, false); });
-    } else if (e.target.closest('.add-staff-btn')) {
-      const branchName = e.target.closest('.add-staff-btn').dataset.branch;
-      if (!adminHasRight('canEditStaff') || !adminHasBranch(branchName)) {
-        showNotification('Permission denied: Add Staff', 'error');
-        return;
-      }
-      openStaffModal(null, branchName);
-    } else if (e.target.closest('.rename-branch-btn')) {
-      const renameBtn = e.target.closest('.rename-branch-btn');
-      const branchName = renameBtn.dataset.branch;
-      if (!adminHasRight('canRenameBranch') || !adminHasBranch(branchName)) {
-        showNotification('Permission denied: Rename Branch', 'error');
-        return;
-      }
-      openPromptModal({
-        title: "Rename Branch",
-        message: `Enter a new name for branch "${branchName}":`,
-        confirmText: "Rename",
-        callback: (newName) => {
-          if (!newName) { showNotification('Branch name cannot be empty.', 'error'); return; }
-          showLoader();
-          setButtonLoading(renameBtn, true, '<i class="fas fa-edit mr-1"></i> Renaming...');
-          postData('renameBranch', { oldName: branchName, newName })
-            .then(response => { showNotification(response.message, 'success'); loadInitialData(); })
-            .catch(e => handleError(e, 'Error renaming branch'))
-            .finally(() => { hideLoader(); setButtonLoading(renameBtn, false); });
-        }
-      });
-    }
-  };
   return section;
 }
 function createStaffGrid(title, staffList, branchName) {
@@ -1674,8 +1804,51 @@ function createStaffGrid(title, staffList, branchName) {
   const grid = document.createElement('div');
   grid.className = 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6';
   const filteredList = staffList.filter(staff => staff['Full Name'] && staff['Full Name'].trim() !== '');
+
   if (filteredList.length > 0) {
-    filteredList.forEach(staff => grid.appendChild(createStaffCard(staff, branchName)));
+    const isFormer = title === 'Former Staff';
+    const maxVisible = 4;
+
+    if (isFormer) {
+      // Separate wrapper for cards so the toggle stays in place
+      const cardsWrap = document.createElement('div');
+      cardsWrap.className = 'contents'; // grid children will flow in the grid
+
+      const renderCards = (list) => {
+        cardsWrap.innerHTML = '';
+        list.forEach(staff => cardsWrap.appendChild(createStaffCard(staff, branchName)));
+      };
+
+      renderCards(filteredList.slice(0, maxVisible));
+      grid.appendChild(cardsWrap);
+
+      if (filteredList.length > maxVisible) {
+        const toggleWrap = document.createElement('div');
+        toggleWrap.className = 'col-span-full flex justify-center';
+        const btn = document.createElement('button');
+        btn.className = 'btn-secondary mt-2';
+        btn.textContent = 'More';
+        btn.setAttribute('data-role', 'former-toggle');
+        btn.setAttribute('data-expanded', 'false');
+        btn.addEventListener('click', () => {
+          const expanded = btn.getAttribute('data-expanded') === 'true';
+          if (expanded) {
+            renderCards(filteredList.slice(0, maxVisible));
+            btn.textContent = 'More';
+            btn.setAttribute('data-expanded', 'false');
+          } else {
+            renderCards(filteredList);
+            btn.textContent = 'Close';
+            btn.setAttribute('data-expanded', 'true');
+          }
+        });
+        toggleWrap.appendChild(btn);
+        grid.appendChild(toggleWrap);
+      }
+    } else {
+      // Not former staff: render all
+      filteredList.forEach(staff => grid.appendChild(createStaffCard(staff, branchName)));
+    }
   } else {
     // Enhanced user message for empty staff
     grid.innerHTML = `<p class="text-gray-500 italic col-span-full">No ${title.toLowerCase()} yet for this branch. You can add staff${title==='Current Staff'&&isAdmin?" using the 'Add Staff' button above.":'.'}</p>`;
@@ -1922,6 +2095,18 @@ function createStaffCard(staff, branchName, options = {}) {
       editBtn.innerHTML = '<i class="fas fa-edit"></i>';
       editBtn.title = 'Edit Staff';
       editBtn.setAttribute('aria-label', `Edit ${fullName}`);
+      editBtn.dataset.action = 'edit-staff';
+      // Ensure direct click handler so overlays or event-delegation issues don't block the edit action
+      editBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        if (!adminHasRight('canEditStaff') || !adminHasBranch(branchName)) {
+          showNotification('Permission denied: Edit Staff', 'error');
+          return;
+        }
+        // Open edit modal for this exact staff (bypass name-based lookup)
+        openStaffModal(staff, branchName);
+      });
       adminControls.appendChild(editBtn);
     }
     
@@ -1931,6 +2116,18 @@ function createStaffCard(staff, branchName, options = {}) {
       deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
       deleteBtn.title = 'Delete Staff';
       deleteBtn.setAttribute('aria-label', `Delete ${fullName}`);
+      deleteBtn.dataset.action = 'delete-staff';
+      // Attach direct handler to avoid relying solely on delegated handlers
+      deleteBtn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        if (!adminHasRight('canDeleteStaff') || !adminHasBranch(branchName)) {
+          showNotification('Permission denied: Delete Staff', 'error');
+          return;
+        }
+        // Reuse existing deletion flow
+        await deleteStaffHandler(staff, branchName);
+      });
       adminControls.appendChild(deleteBtn);
     }
   }
@@ -2266,10 +2463,9 @@ function showStaffDetailsModal(staff, branchName) {
   const editBtn = $('#edit-staff-btn-modal');
   if (isAdmin) {
     editBtn.classList.remove('hidden');
-    editBtn.onclick = () => {
-      closeModal(modal);
-      setTimeout(() => openStaffModal(staff, branchName), 200);
-    };
+    editBtn.dataset.action = 'edit-staff-modal';
+    editBtn.dataset.staff = JSON.stringify(staff);
+    editBtn.dataset.branch = branchName;
   } else {
     editBtn.classList.add('hidden');
   }
@@ -2324,40 +2520,74 @@ function openStaffModal(staff, branchName) {
     removeBtn.className = 'ml-2 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-700';
     $('#photo-upload').insertAdjacentElement('afterend', removeBtn);
   }
-  removeBtn.onclick = () => {
-    openPromptModal({
+  removeBtn.onclick = async () => {
+    const ok = await showConfirmModal({
       title: 'Remove Photo',
-      message: 'Are you sure you want to remove this photo?',
-      confirmText: 'Remove',
-      callback: () => {
-        if (staff && staff['Photo URL']) {
-          showLoader();
-          postData('removePhoto', { photoUrl: staff['Photo URL'], branchName: branchName, rowIndex: staff.rowIndex })
-            .then((response) => {
-              if (response.status === 'success') {
-                $('#photo-preview').src = FALLBACK_PHOTO;
-                staff['Photo URL'] = '';
-                GLOBAL_STATE.tempPhotoData = null;
-                // Clear the Photo URL input in the modal form as well
-                const photoUrlInput = document.querySelector('#staff-form [data-header="Photo URL"]');
-                if (photoUrlInput) photoUrlInput.value = '';
-                showNotification('Photo removed.', 'success');
-              } else {
-                showNotification(response.message, 'error');
-              }
-            })
-            .catch(e => handleError(e, 'Error removing photo.'))
-            .finally(hideLoader);
-        } else {
-          $('#photo-preview').src = FALLBACK_PHOTO;
-        }
-      }
+      message: 'Are you sure you want to remove this photo? This will delete the photo from Google Drive and cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel'
     });
+    if (!ok) return;
+
+    // Defensive: ensure button and staff exist
+    if (!removeBtn) return;
+    removeBtn.disabled = true;
+    removeBtn.classList.add('opacity-60', 'cursor-not-allowed');
+
+    try {
+      if (staff && staff['Photo URL']) {
+        showLoader();
+
+        // Client-side extraction of Drive file id to improve server compatibility
+        const clientExtractDriveFileId = (photoUrl) => {
+          if (!photoUrl) return '';
+          let m = photoUrl.match(/[?&]id=([\w-]+)/);
+          if (m) return m[1];
+          m = photoUrl.match(/\/file\/d\/([\w-]+)/);
+          if (m) return m[1];
+          m = photoUrl.match(/\/uc\?.*id=([\w-]+)/);
+          if (m) return m[1];
+          m = photoUrl.match(/googleusercontent\.com\/d\/([\w-]+)/);
+          if (m) return m[1];
+          // fallback: plain id
+          if (/^[\w-]{20,}$/.test(photoUrl)) return photoUrl;
+          return '';
+        };
+
+        const fileId = clientExtractDriveFileId(staff['Photo URL']) || staff['Photo URL'];
+
+        const response = await postData('removePhoto', {
+          photoUrl: fileId,
+          branchName: branchName,
+          rowIndex: staff.rowIndex
+        });
+
+        if (response && response.status === 'success') {
+          $('#photo-preview').src = FALLBACK_PHOTO;
+          staff['Photo URL'] = '';
+          GLOBAL_STATE.tempPhotoData = null;
+          const photoUrlInput = document.querySelector('#staff-form [data-header="Photo URL"]');
+          if (photoUrlInput) photoUrlInput.value = '';
+          showNotification('Photo removed.', 'success');
+        } else {
+          showNotification((response && response.message) ? response.message : 'Failed to remove photo.', 'error');
+        }
+      } else {
+        // No photo URL present: just clear preview
+        $('#photo-preview').src = FALLBACK_PHOTO;
+      }
+    } catch (e) {
+      handleError(e, 'Error removing photo.');
+    } finally {
+      hideLoader();
+      removeBtn.disabled = false;
+      removeBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+    }
   };
   openModal('staff-modal');
 }
 function openPromptModal({ title, message, confirmText, callback }) {
-  $('#prompt-title').textContent = title;
+  $('#prompt-modal-title').textContent = title;
   $('#prompt-message').textContent = message;
   const input = $('#prompt-input');
   input.value = '';
