@@ -1,60 +1,81 @@
 # Branch Staff Directory
 
-This is a web application designed to serve as a staff directory for a business with multiple branches. The application allows users to view staff information, and provides an admin interface for adding, editing, and deleting staff members and branches.
+A lightweight branch staff directory built with a GitHub Pages frontend and a Google Apps Script backend. The app uses a Google Sheet as the data store and a Google Apps Script (Code.gs) as a serverless JSON API. This makes it easy to edit data using the sheet while serving a responsive frontend to staff and admins.
 
-The unique aspect of this project is its architecture: it leverages a Google Sheet as a real-time database and a Google Apps Script as a serverless backend API. This allows for easy data management directly within a Google Sheet, without the need for a traditional backend server or database.
+Key features
 
-## 🚀 Live Demo
+- View staff by branch (current and former staff)
+- Admin UI for adding, editing, moving and deleting staff
+- Branch management (add/rename/delete)
+- Photo upload and removal (stored in Drive)
+- Admin permission scoping by branch and rights
 
-You can view a live demo of this application [here](https://YOUR_GITHUB_USERNAME.github.io/YOUR_REPO_NAME/).
+## Live demo
 
-## 💻 Architecture Overview
+The app is suitable for GitHub Pages. If you want to publish a demo, enable Pages on this repo (branch `main`, folder `/`).
 
-The project is split into two main parts:
+## Project structure (important files)
 
-1.  **Frontend (Hosted on GitHub Pages):** This includes all the static files—HTML, CSS, and JavaScript. It's a single-page application that handles user interactions and displays data.
-2.  **Backend (Google Apps Script):** This remains hosted on Google's servers. The Apps Script is deployed as a web app that acts as a JSON API, handling all `doGet` and `doPost` requests from the frontend. It reads from and writes to the Google Sheet.
+- `index.html` — main app markup
+- `Styles.css`, `ProfessionalOverrides.css` — styling
+- `JavaScript.js` — frontend app logic (configure `SCRIPT_URL` here)
+- `Code.gs` — Google Apps Script backend (deploy as Web App)
+- `README.md` — this file
 
-The frontend communicates with the Apps Script API using standard `fetch` API calls, making it a powerful and efficient way to manage data.
+## Quick start
 
-## ⚙️ How to Set Up the Project
+1. Create a Google Sheet to act as your data store (use the structure expected by `Code.gs`).
+2. Open the sheet and go to Extensions → Apps Script. Paste the contents of `Code.gs` and save.
+3. In `Code.gs` replace the `SPREADSHEET_ID` constant with your sheet ID.
+4. Deploy the Apps Script as a Web App (Deploy → New deployment → Web app). Set "Execute as" = Me and "Who has access" = Anyone (or Anyone with the link). Copy the Web App URL.
+5. In `JavaScript.js` set `SCRIPT_URL` to the Apps Script Web App URL (replace the placeholder constant near the top of the file).
+6. Push files to GitHub and enable GitHub Pages (Settings → Pages) for the branch containing `index.html`.
+7. Open the published Pages URL to view the app.
 
-### Prerequisites
+## Admin account (default)
 
-* A Google account with access to Google Sheets and Google Drive.
-* A GitHub account.
+The `Code.gs` file includes an initialization helper that sets a default admin when first run (see `initializeMainAdmin`). The default email/password in the current `Code.gs` are shown as an example — change them after first login.
 
-### Step 1: Set Up the Google Apps Script Backend
+Important: change the default admin credentials immediately after initialization.
 
-1.  **Create a Google Sheet:** Create a new Google Sheet that will serve as your database. Make sure to name the first sheet 'Master' or a similar name to be used as a template for new branches.
-2.  **Open Apps Script:** In the Google Sheet, go to `Extensions > Apps Script`.
-3.  **Paste the Code:** Copy the code from the `Code.gs` file in this repository and paste it into the script editor.
-4.  **Update the Spreadsheet ID:** Find the `SPREADSHEET_ID` constant at the top of the `Code.gs` file and replace the placeholder with the ID of your newly created Google Sheet.
-5.  **Deploy as a Web App:**
-    * Click on `Deploy > New deployment`.
-    * Select `Web app` as the type.
-    * Set `Execute as` to **Me**.
-    * Set `Who has access` to **Anyone**.
-    * Click **Deploy** and authorize the script.
-6.  **Copy the Web App URL:** After deployment, Google will provide you with a Web App URL. **Copy this URL** as you will need it for the next step.
+## Photo handling notes
 
-### Step 2: Configure the Frontend
+- Uploaded photos are resized client-side and sent as base64; the backend uploads them to a Drive folder named `Branch Staff Photos` and saves the Drive file id in the sheet.
+- When you click "Remove Photo" the client will call the `removePhoto` API which attempts to trash the Drive file and clears the sheet value. If Drive permissions prevent deleting the file you may still need to remove it manually from Drive.
 
-1.  **Open `JavaScript.html`:** In this repository's code, open the `JavaScript.html` file.
-2.  **Paste the URL:** Find the `SCRIPT_URL` constant at the top of the file and paste the Web App URL you copied from the previous step.
-3.  **Save the file.**
+## Common troubleshooting
 
-### Step 3: Push to GitHub and Deploy
+- Confirm `SCRIPT_URL` is set to the exact Web App URL returned by Apps Script deployment.
+- Apps Script deployment: ensure you choose the correct access (Anyone or Anyone with the link) so GitHub Pages can call it.
+- Photo permissions: Apps Script will operate under the account that deployed it. If photos fail to upload/delete, re-check the account's Drive permissions and the target folder name.
+- Modal/dialog stacking: If a confirmation appears under an open modal, we added z-index tweaks so confirm dialogs appear on top — verify styles if custom CSS changes it.
 
-1.  **Clone the Repository:** Clone this repository to your local machine.
-2.  **Commit Your Changes:** Commit the change you made to the `JavaScript.html` file.
-3.  **Push to GitHub:** Push your updated code to your GitHub repository.
-4.  **Enable GitHub Pages:**
-    * Go to your repository on GitHub.
-    * Click on **Settings > Pages**.
-    * Select the branch (`main` or `master`) and the folder (`/` or `root`) where your files are located.
-    * Click **Save**. Your site will be live in a few minutes!
+## Developer notes
 
-## 🤝 Contributing
+- Frontend: plain vanilla JS with helper functions and delegated event handling. The file to edit for most changes is `JavaScript.js`.
+- Backend: `Code.gs` contains the GAS API. It uses `doGet` and `doPost` handlers to serve JSON responses. The spreadsheet layout (headers) should be preserved.
+- To change the photo folder name on Drive, update the `PHOTO_FOLDER_NAME` constant in `Code.gs` and re-deploy.
 
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/issues) for any open issues or to create a new one.
+## Security considerations
+
+- The app currently uses a simple session token approach stored in localStorage. For production use consider stronger auth (OAuth, firebase auth, etc.) and move session tokens into secure cookies.
+- Limit Apps Script access appropriately. Only deploy the web app with minimum required permissions.
+
+## Contributing
+
+Feel free to open issues or PRs. Suggestions:
+
+- Improve input validation and error handling
+- Add unit tests for key logic
+- Move UI to a lightweight framework (Alpine, Lit) for easier maintenance
+
+## Contact / Support
+
+Open an issue in this repository with the label `bug` or `enhancement` and include console errors and steps to reproduce.
+
+---
+
+If you'd like, I can also:
+
+- Add a short developer checklist to the README (deploy, update SCRIPT_URL, change admin creds)
+- Extract constants (z-index values, folder names) into top-of-file variables for easier configuration
